@@ -9,7 +9,7 @@ class Utils:
     def __init__(self):
         pass
 
-    def benchmark_plot(self, all_train_returns, all_test_returns, test_interval, moving_avg_window=100, down_sample_factor=100):
+    def benchmark_plot(self, all_train_returns, all_test_returns, all_test_lengths, test_interval, moving_avg_window=100, down_sample_factor=100):
         """Data processing and calculations"""
         num_trials = len(all_train_returns)
         num_points = len(all_test_returns[0])
@@ -17,13 +17,16 @@ class Utils:
         # Convert lists to numpy arrays for easier calculations
         all_train_returns = np.array(all_train_returns)
         all_test_returns = np.array(all_test_returns)
+        all_test_lengths = np.array(all_test_lengths)
 
         # Calculate the mean and 95% confidence intervals
         mean_train_returns = all_train_returns.mean(axis=0)
         mean_test_returns = all_test_returns.mean(axis=0)
+        mean_test_lengths = all_test_lengths.mean(axis=0)
 
         train_ci = 1.96 * all_train_returns.std(axis=0) / np.sqrt(num_trials)
         test_ci = 1.96 * all_test_returns.std(axis=0) / np.sqrt(num_trials)
+        test_len_ci = 1.96 * all_test_lengths.std(axis=0) / np.sqrt(num_trials)
 
         # Calculate individual maximum returns from each trial
         individual_max_returns = [np.max(trial_returns) for trial_returns in all_test_returns]
@@ -46,8 +49,21 @@ class Utils:
         # down_sampled_indices = np.arange(0, len(smoothed_mean_train_returns), down_sample_factor)
         # down_sampled_mean_train_returns = smoothed_mean_train_returns[down_sampled_indices]
         # down_sampled_train_ci = smoothed_train_ci[down_sampled_indices]
+        """Plot test episode lengths"""
+        plt.figure(figsize=(12, 6))
+        episodes = np.arange(0, num_points * test_interval, test_interval)
+        for i in range(num_trials):
+            plt.plot(episodes, all_test_lengths[i], linestyle='dotted', alpha=0.5, label=f'Trial {i+1}')  # Individual test trials
+        plt.plot(episodes, mean_test_lengths, '-o', label='Mean Episode Lengths', color='black')  # Mean test returns without error bars
+        plt.fill_between(episodes, mean_test_lengths - test_len_ci, mean_test_lengths + test_len_ci, color='lightblue', alpha=0.3, label='CI')  # Fill between upper and lower bounds
+        plt.xlabel('Training Episodes')
+        plt.ylabel('Average Test Episode Length')
+        plt.title('Test Episode Lengths with 95% Confidence Interval')
+        plt.legend()
+        plt.show()
 
-        """Plot test rewards"""
+
+        """Plot test returns"""
         plt.figure(figsize=(12, 6))
         episodes = np.arange(0, num_points * test_interval, test_interval)
         for i in range(num_trials):
@@ -60,15 +76,15 @@ class Utils:
         plt.legend()
         plt.show()
 
-        # Plot density plot of test returns
-        plt.figure(figsize=(12, 6))
-        #sns.kdeplot(mean_test_returns, fill=True, label='Density Plot')
-        sns.kdeplot(mean_test_returns, label='Density Plot')
-        plt.xlabel('Test Return')
-        plt.ylabel('Density')
-        plt.title('Density Plot of Test Returns')
-        plt.legend()
-        plt.show()
+        """Plot density plot of test returns (Not in use)"""
+        # plt.figure(figsize=(12, 6))
+        # #sns.kdeplot(mean_test_returns, fill=True, label='Density Plot')
+        # sns.kdeplot(mean_test_returns, label='Density Plot')
+        # plt.xlabel('Test Return')
+        # plt.ylabel('Density')
+        # plt.title('Density Plot of Test Returns')
+        # plt.legend()
+        # plt.show()
 
         """Plot test rewards (Not in use)"""
         # # Plot training returns with moving average and confidence interval
@@ -81,7 +97,7 @@ class Utils:
         # plt.legend()
         # plt.show()
 
-        # # Plot density plot of training returns
+        """Plot density plot of training returns"""
         # plt.figure(figsize=(12, 6))
         # #sns.kdeplot(mean_train_returns, fill=True, label='Density Plot')
         # sns.kdeplot(mean_train_returns, label='Density Plot')

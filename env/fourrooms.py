@@ -1,4 +1,5 @@
 import logging
+import pygame
 import math
 import gymnasium as gym
 from gymnasium import spaces
@@ -10,10 +11,15 @@ logger = logging.getLogger(__name__)
 class FourRooms(gym.Env):
     metadata = {
         'render.modes': ['human', 'rgb_array'],
-        'video.frames_per_second' : 50
+        'render_fps' : 50
     }
 
-    def __init__(self):
+    def __init__(self, render_mode=None):
+        self.render_mode = render_mode
+        #pygame info
+        self.cell_size = 40  # Size of each cell in pixels
+        self.screen = None
+        self.clock = None
 
         layout = """\
 wwwwwwwwwwwww
@@ -30,6 +36,7 @@ w           w
 w     w     w
 wwwwwwwwwwwww
 """
+
         self.occupancy = np.array([list(map(lambda c: 1 if c=='w' else 0, line)) for line in layout.splitlines()])
 
         # From any state the agent can perform one of four actions, up, down, left or right
@@ -53,6 +60,15 @@ wwwwwwwwwwwww
         self.init_states.remove(self.goal)
         self.ep_steps = 0
 
+        # Pygame setup (if rendering is enabled)
+        if self.render_mode == "human":
+            pygame.init()
+            self.screen = pygame.display.set_mode(
+                (self.occupancy.shape[1] * self.cell_size, self.occupancy.shape[0] * self.cell_size)
+            )
+            self.clock = pygame.time.Clock()
+
+
     def seed(self, seed=None):
         return self._seed(seed)
 
@@ -68,11 +84,17 @@ wwwwwwwwwwwww
                 avail.append(nextcell)
         return avail
 
-    def reset(self):
+    def reset(self, *, seed=None, options=None):
         state = self.rng.choice(self.init_states)
         self.currentcell = self.tocell[state]
         self.ep_steps = 0
-        return self.get_state(state), []
+        return self.get_state(state), {}
+
+    # def reset(self):
+    #     state = self.rng.choice(self.init_states)
+    #     self.currentcell = self.tocell[state]
+    #     self.ep_steps = 0
+    #     return self.get_state(state), {}
 
     def switch_goal(self):
         prev_goal = self.goal
@@ -87,13 +109,63 @@ wwwwwwwwwwwww
         s[state] = 1
         return s
 
-    def render(self, show_goal=True):
-        current_grid = np.array(self.occupancy)
-        current_grid[self.currentcell[0], self.currentcell[1]] = -1
-        if show_goal:
+    def close(self):
+        if self.render_mode == "human" and self.screen is not None:
+            pygame.display.quit()  # Close the display
+            pygame.quit()  # Quit pygame
+            self.screen = None
+
+    def render(self):
+        if self.render_mode == "human":
+            if self.screen is None:
+                raise ValueError("Environment is not set up for rendering. Use render_mode='human'.")
+
+            # Handle pygame events to prevent freezing
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:  # Handle window close event
+                    pygame.quit()
+                    exit()
+
+            # Draw the grid
+            self.screen.fill((255, 255, 255))  # White background
+            for i in range(self.occupancy.shape[0]):
+                for j in range(self.occupancy.shape[1]):
+                    color = (0, 0, 0) if self.occupancy[i, j] == 1 else (200, 200, 200)  # Walls or empty space
+                    pygame.draw.rect(
+                        self.screen,
+                        color,
+                        pygame.Rect(j * self.cell_size, i * self.cell_size, self.cell_size, self.cell_size),
+                    )
+
+            # Draw the goal
             goal_cell = self.tocell[self.goal]
-            current_grid[goal_cell[0], goal_cell[1]] = -1
-        return current_grid
+            pygame.draw.rect(
+                self.screen,
+                (0, 255, 0),  # Green
+                pygame.Rect(goal_cell[1] * self.cell_size, goal_cell[0] * self.cell_size, self.cell_size,
+                            self.cell_size),
+            )
+
+            # Draw the agent
+            pygame.draw.rect(
+                self.screen,
+                (255, 0, 0),  # Red
+                pygame.Rect(
+                    self.currentcell[1] * self.cell_size, self.currentcell[0] * self.cell_size, self.cell_size,
+                    self.cell_size
+                ),
+            )
+
+            # Render timestep counter
+            if not hasattr(self, "font"):
+                pygame.font.init()
+                self.font = pygame.font.Font(None, 36)  # Default font, size 36
+            timestep_text = self.font.render(f"t = {self.ep_steps}", True, (240, 250, 250))
+            self.screen.blit(timestep_text, (10, 10))  # Position at top-left corner
+
+            # Update the display
+            pygame.display.flip()
+            self.clock.tick(self.metadata["render_fps"])  # Limit FPS
 
     def step(self, action):
         """

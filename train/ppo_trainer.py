@@ -22,6 +22,7 @@ class PPOtrainer:
 
         episode_rewards = []
         test_rewards = []
+        test_episode_lengths = []
 
         n_ep = 0
 
@@ -60,6 +61,10 @@ class PPOtrainer:
                     total_reward += reward
                     obs = next_obs
 
+                    if terminated or truncated:     #Optional for printing train episode lengths
+                        # print(f"****training episode {n_ep+1}: {t+1} steps ****")
+                        pass
+
                     #logic for episode termination/truncation
                     if truncated:   #Compute next value if episode env timelimit is reached
                         next_state = pre_process(obs).to(device)
@@ -81,10 +86,12 @@ class PPOtrainer:
 
                 #test at interval and print result
                 if n_ep % params.test_interval == 0:
-                    test_reward = self.test(deepcopy(actor), params)
+                    # show_testing = False if n_ep < params.render_delay and params.show_testing else True
+                    test_reward, episode_length = self.test(deepcopy(actor), params, n_ep)
                     test_rewards.append(test_reward)
-                    print(f'Test reward at episode {n_ep}: {test_reward:.2f} '
-                          f'(train reward: {total_reward:.2f})')
+                    test_episode_lengths.append(episode_length)
+                    print(f'Test reward at episode {n_ep}: {test_reward:.2f} | '
+                          f'Average test episode length: {episode_length}')
 
             #process buffer once full
             batch_process = BatchProcessing()
@@ -125,23 +132,28 @@ class PPOtrainer:
                     actor_loss.backward()
                     actor_opt.step()
 
-        print("Trial done")
-        return episode_rewards, test_rewards
+        print("Trial complete")
+        return episode_rewards, test_rewards, test_episode_lengths
 
     @staticmethod
-    def test(actor, params):
-        """tests agent and averages result, add keyword render_mode="human"
-            to the line below to watch testing"""
+    def test(actor, params, n_ep):
+        """tests agent and averages result, configure whether to show (render)
+            testing and how long to delay in ParametersPPO class"""
+        render_testing = params.show_testing and n_ep > params.render_delay
+
         if params.env_name is None:
-            test_env = FourRooms
+            test_env = FourRooms(render_mode="human") if render_testing else FourRooms()
         else:
             test_env = gym.make(params.env_name)  # , render_mode="human")
 
         test_rewards = np.zeros(params.test_episodes)
+        episode_lengths = np.zeros(params.test_episodes)
+        test_returns = np.zeros(params.test_episodes)
 
         for i in range(params.test_episodes):
             total_reward = 0
             obs, _ = test_env.reset()
+            rewards = []
 
             for t in range(params.t_max):
                 state = pre_process(obs)
@@ -149,13 +161,26 @@ class PPOtrainer:
                 action, _, _ = actor.select_action(logits)
                 next_obs, reward, done, trunc, _ = test_env.step(action.item())
 
+                test_env.render()
+
+                rewards.append(reward)
                 total_reward += reward
                 obs = next_obs
                 if done or trunc:
+                    episode_lengths[i] = t + 1
                     break
-
             test_rewards[i] = total_reward
 
+            #compute discounted return
+            gt = 0
+            for k in reversed(range(len(rewards))):
+                gt = rewards[k] + params.gamma * gt
+            test_returns[i] = gt
+
         test_env.close()
+
         average_reward = np.mean(test_rewards)
-        return average_reward
+        average_length = np.mean(episode_lengths)
+        average_return = np.mean(test_returns)
+
+        return average_return, average_length

@@ -4,6 +4,8 @@ import torch as th
 class ParametersPPO:
     def __init__(self):
         self.device = th.device('cuda' if th.cuda.is_available() else 'cpu')
+        self.show_testing = False #set to True to render test episodes
+        self.render_delay = 90 #set an episode delay for rendering test episodes
 
         # training loop hyperparameters
         self.num_trials = 5
