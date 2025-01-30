@@ -5,7 +5,7 @@ import numpy as np
 import torch as th
 from torch.distributions import Categorical
 
-from env.fourrooms import FourRooms
+from env.fourrooms import FourRooms, FourRooms_m
 from agent.ppo import PPOActor, PPOCritic
 from helpers.ppo_helper import BatchProcessing, compute_GAE, pre_process
 
@@ -21,8 +21,10 @@ class PPOtrainer:
         critic_opt = th.optim.Adam(critic.parameters(), lr=params.critic_lr)
 
         episode_rewards = []
-        test_rewards = []
+        test_returns = []
         test_episode_lengths = []
+
+        if params.switch_goal: print(f"Current goal {env.goal}")
 
         n_ep = 0
 
@@ -87,11 +89,16 @@ class PPOtrainer:
                 #test at interval and print result
                 if n_ep % params.test_interval == 0:
                     # show_testing = False if n_ep < params.render_delay and params.show_testing else True
-                    test_reward, episode_length = self.test(deepcopy(actor), params, n_ep)
-                    test_rewards.append(test_reward)
+                    test_return, episode_length = self.test(deepcopy(actor), params, n_ep, env.goal)
+                    test_returns.append(test_return)
                     test_episode_lengths.append(episode_length)
-                    print(f'Test reward at episode {n_ep}: {test_reward:.2f} | '
+                    print(f'Test return at episode {n_ep}: {test_return:.3f} | '
                           f'Average test episode length: {episode_length}')
+
+                #Switch Goal location
+                if params.switch_goal and n_ep == params.total_train_episodes/2:
+                    env.switch_goal()
+                    print(f"New goal {env.goal}")
 
             #process buffer once full
             batch_process = BatchProcessing()
@@ -133,16 +140,20 @@ class PPOtrainer:
                     actor_opt.step()
 
         print("Trial complete")
-        return episode_rewards, test_rewards, test_episode_lengths
+        return episode_rewards, test_returns, test_episode_lengths
 
     @staticmethod
-    def test(actor, params, n_ep):
+    def test(actor, params, n_ep, goal):
         """tests agent and averages result, configure whether to show (render)
             testing and how long to delay in ParametersPPO class"""
         render_testing = params.show_testing and n_ep > params.render_delay
 
-        if params.env_name is None:
+        if params.env_name == 'FourRooms':
             test_env = FourRooms(render_mode="human") if render_testing else FourRooms()
+            test_env.choose_goal(goal)
+        elif params.env_name == 'FourRooms_m':
+            test_env = FourRooms_m(render_mode="human") if render_testing else FourRooms_m()
+            test_env.choose_goal(goal)
         else:
             test_env = gym.make(params.env_name)  # , render_mode="human")
 
@@ -151,7 +162,6 @@ class PPOtrainer:
         test_returns = np.zeros(params.test_episodes)
 
         for i in range(params.test_episodes):
-            total_reward = 0
             obs, _ = test_env.reset()
             rewards = []
 
@@ -164,12 +174,12 @@ class PPOtrainer:
                 test_env.render()
 
                 rewards.append(reward)
-                total_reward += reward
+                # total_reward += reward
                 obs = next_obs
                 if done or trunc:
                     episode_lengths[i] = t + 1
                     break
-            test_rewards[i] = total_reward
+            test_rewards[i] = sum(rewards) #Check if this works?
 
             #compute discounted return
             gt = 0
@@ -179,7 +189,7 @@ class PPOtrainer:
 
         test_env.close()
 
-        average_reward = np.mean(test_rewards)
+        # average_reward = np.mean(test_rewards)
         average_length = np.mean(episode_lengths)
         average_return = np.mean(test_returns)
 
