@@ -6,7 +6,7 @@ import torch as th
 from torch.distributions import Categorical
 
 from env.fourrooms import FourRooms, FourRooms_m
-from agent.ppo import PPOActor, PPOCritic
+from agent.ppo import PPO_Actor, PPO_Critic
 from helpers.ppo_helper import BatchProcessing, compute_GAE, pre_process
 
 class PPOtrainer:
@@ -15,8 +15,8 @@ class PPOtrainer:
 
     def train(self, env, params):
         device = params.device
-        actor = PPOActor(params.state_dim, params.actor_hidden_dim, params.action_dim).to(device)
-        critic = PPOCritic(params.state_dim, params.critic_hidden_dim).to(device)
+        actor = PPO_Actor(params.state_dim, params.actor_hidden_dim, params.action_dim).to(device)
+        critic = PPO_Critic(params.state_dim, params.critic_hidden_dim).to(device)
         actor_opt = th.optim.Adam(actor.parameters(), lr=params.actor_lr)
         critic_opt = th.optim.Adam(critic.parameters(), lr=params.critic_lr)
 

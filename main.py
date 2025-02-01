@@ -7,7 +7,8 @@ from env.fourrooms import FourRooms, FourRooms_m
 from runner.runner import ALGOrunner
 from train.ppo_trainer import PPOtrainer
 from train.oc_trainer import OCtrainer
-from util.parameters import ParametersPPO, ParametersOC
+from train.dac_trainer import DACtrainer
+from util.parameters import ParametersPPO, ParametersOC, ParametersDAC
 
 def main():
     parser  = argparse.ArgumentParser(description = "Run different variations of algorithms and environments.")
@@ -36,9 +37,8 @@ def main():
         params = ParametersOC()
         trainer = lambda: OCtrainer()
     elif args.algo == 'dac':
-        raise ValueError("Not Implemented")
-        # params = ParametersDAC()
-        # trainer = lambda: DACtrainer()
+        params = ParametersDAC()
+        trainer = lambda: DACtrainer()
     else:
         raise ValueError("Algorithm name incorrect or not found")
 

@@ -5,9 +5,9 @@ from torch.nn import functional as F
 from torch.distributions import Categorical
 
 
-class PPOActor(nn.Module):
+class PPO_Actor(nn.Module):
     def __init__(self, state_dim, hidden_dim, action_dim):
-        super(PPOActor, self).__init__()
+        super(PPO_Actor, self).__init__()
         self.state_dim = state_dim
         self.action_dim = action_dim
 
@@ -49,9 +49,9 @@ class PPOActor(nn.Module):
         loss = -th.min(surr1, surr2).mean()
         return loss
 
-class PPOCritic(nn.Module):
+class PPO_Critic(nn.Module):
     def __init__(self, state_dim, hidden_dim):
-        super(PPOCritic, self).__init__()
+        super(PPO_Critic, self).__init__()
         self.state_dim = state_dim
 
         self.fc1 = nn.Linear(state_dim, hidden_dim)

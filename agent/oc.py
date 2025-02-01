@@ -1,11 +1,38 @@
 import torch as th
 import torch.nn as nn
+from torch.nn import functional as F
 from torch.distributions import Categorical, Bernoulli
+#TODO: rework OC implementation to match original paper
 
 import sys
 from math import exp
 import numpy as np
 from helpers.oc_helper import pre_process
+
+# class OC_MasterPolicy(nn.Module):
+#     """"""
+#     def __init__(self, params):
+#         super(OC_MasterPolicy, self).__init__()
+#         self.device = params.device
+#         self.temp = params.temp
+#         self.fc1 = nn.Linear(params.state_dim, params.num_options)
+#         self.fc2 = nn.Linear(params.state_size, params.state_size)
+#
+#
+#     def forward(self, state):
+#         x = state
+#         q = self.fc1(x)
+#         return q
+#
+#     def get_pi_hat(self, state):
+#         q = self.forward(state)
+#         policy = F.softmax(q / self.temperature, dim=-1)
+#         return policy
+#
+#     def sample_options(self, state):
+#         pi_hat = self.get_pi_hat(state)
+
+
 
 class OptionCritic(nn.Module):
     def __init__(self, params):
