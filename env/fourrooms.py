@@ -119,8 +119,7 @@ wwwwwwwwwwwww
             pygame.quit()  # Quit pygame
             self.screen = None
 
-    def render(self):
-        #TODO: add functionality for showing current option?
+    def render(self, ep, text_top=None, text_bot=None):
         if self.render_mode == "human":
             if self.screen is None:
                 raise ValueError("Environment is not set up for rendering. Use render_mode='human'.")
@@ -161,12 +160,28 @@ wwwwwwwwwwwww
                 ),
             )
 
-            # Render timestep counter
+            # initialize font
             if not hasattr(self, "font"):
                 pygame.font.init()
                 self.font = pygame.font.Font(None, 36)  # Default font, size 36
-            timestep_text = self.font.render(f"t = {self.ep_steps}", True, (240, 250, 250))
+                self.small_font = pygame.font.Font(None, 24)
+
+            #Render timestep counter and test ep number
+            timestep_text = self.font.render(f"Test ep {ep}, t = {self.ep_steps}", True, (240, 250, 250))
             self.screen.blit(timestep_text, (10, 10))  # Position at top-left corner
+
+            # Render optional text (Top-right)
+            if text_top:
+                text_surface = self.small_font.render(text_top, True, (240, 250, 250))
+                text_rect = text_surface.get_rect(topright=(self.screen.get_width() - 10, 10))
+                self.screen.blit(text_surface, text_rect)
+
+            # Render optional text (Bottom-left)
+            if text_bot:
+                text_surface = self.small_font.render(text_bot, True, (240, 250, 250))
+                text_rect = text_surface.get_rect(bottomleft=(10, self.screen.get_height() - 10))
+                # text_rect = text_surface.get_rect(bot=(self.screen.get_width() - 10, 10))
+                self.screen.blit(text_surface, text_rect)
 
             # Update the display
             pygame.display.flip()
@@ -215,22 +230,21 @@ class FourRooms_m(gym.Env):
         self.screen = None
         self.clock = None
 
-
         layout = """\
-wwwwwwwwwwwww
-w   w       w
-w   w       w
-w   w   w   w
-w   w   w   w
-w   w   w   w
-w   w   w   w
-w   w   w   w
-w   w   w   w
-w   w   w   w
-w       w   w
-w       w   w
-wwwwwwwwwwwww
-"""
+        wwwwwwwwwwwww
+        w   w       w
+        w   w       w
+        w   w   w   w
+        w   w   w   w
+        w   w   w   w
+        w   w   w   w
+        w   w   w   w
+        w   w   w   w
+        w   w   w   w
+        w       w   w
+        w       w   w
+        wwwwwwwwwwwww
+        """
 
         self.occupancy = np.array([list(map(lambda c: 1 if c=='w' else 0, line)) for line in layout.splitlines()])
 
@@ -314,7 +328,7 @@ wwwwwwwwwwwww
             pygame.quit()  # Quit pygame
             self.screen = None
 
-    def render(self):
+    def render(self, ep, text_top=None, text_bot=None):
         if self.render_mode == "human":
             if self.screen is None:
                 raise ValueError("Environment is not set up for rendering. Use render_mode='human'.")
@@ -355,12 +369,28 @@ wwwwwwwwwwwww
                 ),
             )
 
-            # Render timestep counter
+            # initialize font
             if not hasattr(self, "font"):
                 pygame.font.init()
                 self.font = pygame.font.Font(None, 36)  # Default font, size 36
-            timestep_text = self.font.render(f"t = {self.ep_steps}", True, (240, 250, 250))
+                self.small_font = pygame.font.Font(None, 24)
+
+            #Render timestep counter and test ep number
+            timestep_text = self.font.render(f"Test ep {ep}, t = {self.ep_steps}", True, (240, 250, 250))
             self.screen.blit(timestep_text, (10, 10))  # Position at top-left corner
+
+            # Render optional text (Top-right)
+            if text_top:
+                text_surface = self.small_font.render(text_top, True, (240, 250, 250))
+                text_rect = text_surface.get_rect(topright=(self.screen.get_width() - 10, 10))
+                self.screen.blit(text_surface, text_rect)
+
+            # Render optional text (Bottom-left)
+            if text_bot:
+                text_surface = self.small_font.render(text_bot, True, (240, 250, 250))
+                text_rect = text_surface.get_rect(bottomleft=(10, self.screen.get_height() - 10))
+                # text_rect = text_surface.get_rect(bot=(self.screen.get_width() - 10, 10))
+                self.screen.blit(text_surface, text_rect)
 
             # Update the display
             pygame.display.flip()
@@ -395,7 +425,6 @@ wwwwwwwwwwwww
             truncated = True ; reward = 0.0
 
         return self.get_state(state), reward, done, truncated, None
-
 
 
 if __name__=="__main__":

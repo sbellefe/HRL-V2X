@@ -1,11 +1,12 @@
 import math
 import torch as th
+from torch.nn import functional as F
 
 class SharedParams:
     def __init__(self):
         self.device = th.device('cuda' if th.cuda.is_available() else 'cpu')
         self.show_testing = False  # set to True to render test episodes
-        self.render_delay = 20  # set an episode delay for rendering test episodes
+        self.render_delay = 189  # set an episode delay for rendering test episodes
         self.switch_goal = True  # switches goal halfway between total_train_episodes
         self.starting_goal = 62  # East doorway in FourRooms
 
@@ -40,26 +41,35 @@ class ParametersDAC(SharedParams):
     def __init__(self):
         super(ParametersDAC, self).__init__()
 
+        #Network hidden dimensions
+        hidden_dim = 128
+        self.option_hidden_units = (hidden_dim, hidden_dim) #hidden neurons for sub-policy and beta networks
+        self.actor_hidden_units = (hidden_dim, hidden_dim) #hidden neurons for master policy network
+        self.critic_hidden_units = (hidden_dim, hidden_dim) #not currently implemented, uses actor_hidden_units
+
+        #hidden neuron activation functions lambda x: F.relu(x) or F.tanh(x)
+        self.pi_l_activation = lambda x: F.tanh(x)     #option policies
+        self.beta_activation = lambda x: F.tanh(x)     #option termination
+        self.pi_h_activation = lambda x: F.tanh(x)     #master policy
+        self.critic_activation = lambda x: F.tanh(x)     #critic
 
         # training loop hyperparameters
         self.num_options = 4
         self.buffer_episodes = 10  # num episodes in batch buffer
-        self.opt_epochs = 10  # num optimization epochs per batch buffer
+        self.opt_epochs = 5  # num optimization epochs per batch buffer per mdp
         self.mini_batch_size = 64
         self.train_iterations = math.ceil(self.total_train_episodes / self.buffer_episodes)  # top-lvl loop index
 
         # training value hyperparameters
-        self.actor_hidden_dim = 128
-        self.critic_hidden_dim = 128
-        self.beta_hidden_dim = 64
-        self.lr_ha = 3e-4       #high actor learning rate
-        self.lr_la = 3e-4       #low actor learning rate
-        self.lr_critic = 3e-3       #critic learning rate
-        self.lr_beta = 3e-4     #beta network learning rate
+        self.lr_ha = 3e-4       #high actor (pi_W) learning rate
+        self.lr_la = 3e-4       #low actor (pi_w) learning rate
+        self.lr_critic = 1e-3       #critic learning rate
+        self.lr_beta = 1e-4     #beta network learning rate
         self.eps_clip = 0.2     #ppo clipping parameter
-        self.gamma = 0.99
-        self.gae_lambda = 0.99
-        self.entropy_coef = 0.01
+        self.gamma = 0.99       #discount
+        self.gae_lambda = 0.99      #GAE smoothing param
+        self.entropy_coef_h = 0.01  #high MDP exploration entropy coefficient
+        self.entropy_coef_l = 0.01  #low MDP exploration entropy coefficient
 
 
 class ParametersOC(SharedParams):

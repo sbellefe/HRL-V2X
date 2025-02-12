@@ -172,7 +172,9 @@ class OCtrainer:
 
                 next_obs, reward, done, trunc, _ = test_env.step(action)
 
-                test_env.render()
+                # render environment, including metrics
+                test_env.render(i, text_top=f"Current option = {current_option}",
+                                text_bot=f"beta = {beta:.1f}")
 
                 next_state = agent.get_state(pre_process(next_obs))
                 beta, greedy_option = agent.get_beta(next_state, current_option)

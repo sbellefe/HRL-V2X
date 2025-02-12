@@ -111,6 +111,7 @@ class PPOtrainer:
             dataloader = th.utils.data.DataLoader(dataset, batch_size=params.mini_batch_size, shuffle=True)
 
             #optimization loop
+            loss_p, loss_c = [], []
             for _ in range(params.opt_epochs):
                 for batch in dataloader:
                     states_mb, actions_mb, logp_mb, values_mb, returns_mb, advantages_mb = batch
@@ -138,6 +139,15 @@ class PPOtrainer:
                     actor_loss = actor_loss - params.entropy_coef * entropy
                     actor_loss.backward()
                     actor_opt.step()
+
+                    loss_p.append(actor_loss)
+                    loss_c.append(critic_loss)
+
+            av_loss_p = sum(loss_p) / len(loss_p)
+            av_loss_c = sum(loss_c) / len(loss_c)
+            print(f"Optimization complete avg losses: "
+                  f"Policy loss: {av_loss_p:.3f} | "
+                  f"Critic loss: {av_loss_c:.3f}")
 
         print("Trial complete")
         return episode_rewards, test_returns, test_episode_lengths
@@ -171,7 +181,7 @@ class PPOtrainer:
                 action, _, _ = actor.select_action(logits)
                 next_obs, reward, done, trunc, _ = test_env.step(action.item())
 
-                test_env.render()
+                test_env.render(i)
 
                 rewards.append(reward)
                 # total_reward += reward

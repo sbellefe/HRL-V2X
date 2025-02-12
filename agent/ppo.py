@@ -75,10 +75,10 @@ class PPO_Critic(nn.Module):
         value = self.fc3(x)
         return value
 
-    def critic_loss(self, values, old_values, returns, eps_clip):
+    def critic_loss(self, new_values, old_values, returns, eps_clip):
         # value_clip = old_values + th.clamp(values - old_values, -eps_clip, eps_clip)
-        value_clip = th.clamp(values, old_values - eps_clip, old_values + eps_clip)
-        loss_unclipped = (values - returns).pow(2)
+        value_clip = th.clamp(new_values, old_values - eps_clip, old_values + eps_clip)
+        loss_unclipped = (new_values - returns).pow(2)
         loss_clipped = (value_clip - returns).pow(2)
         loss = th.max(loss_unclipped, loss_clipped).mean()
         return loss

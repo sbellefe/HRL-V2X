@@ -6,8 +6,8 @@ import gymnasium as gym
 from torch.distributions import Categorical
 
 from env.fourrooms import FourRooms, FourRooms_m
-from agent.dac import DAC_Actor, DAC_Critic, DAC_Beta
-from helpers.dac_helper import BatchProcessing, compute_GAE, pre_process
+from agent.dac import DAC_Network
+from helpers.dac_helper import BatchProcessing, compute_GAE, pre_process, compute_pi_hat
 
 class DACtrainer():
     def __init__(self):
@@ -16,125 +16,126 @@ class DACtrainer():
     def train(self, env, params):
         device = params.device
 
-        actor_h = DAC_Actor(params, mdp='high')
-        actor_l = DAC_Actor(params, mdp='low')
-        critic = DAC_Critic(params)
-        beta_net = DAC_Beta(params)
-
-        opt_actor_h = th.optim.Adam(actor_h.parameters(), lr=params.lr_ha)
-        opt_actor_l = th.optim.Adam(actor_l.parameters(), lr=params.lr_la)
-        opt_critic = th.optim.Adam(critic.parameters(), lr=params.lr_critic)
-        opt_beta = th.optim.Adam(beta_net.parameters(), lr=params.lr_beta)
-
-        # opt = th.optim.Adam([
-        #     {'params': actor_h.parameters(), 'lr': params.lr_ha},
-        #     {'params': actor_l.parameters(), 'lr': params.lr_la},
-        #     {'params': critic.parameters(), 'lr': params.lr_critic},
-        #     {'params': beta_net.parameters(), 'lr': params.lr_beta}],
-        #     weight_decay=1e-4)
+        #initialize network and optimizer
+        network = DAC_Network(params).to(device)
+        # for name, param in network.named_parameters():
+        #     print(name, param.shape)
+        # sys.exit()
+        opt = th.optim.Adam([
+            {'params': [p for n, p in network.named_parameters() if 'pi_' in n], 'lr': params.lr_la},    #sub policy
+            {'params': [p for n, p in network.named_parameters() if 'actor' in n], 'lr': params.lr_ha},     #master policy
+            {'params': [p for n, p in network.named_parameters() if 'critic' in n], 'lr': params.lr_critic},
+            {'params': [p for n, p in network.named_parameters() if 'beta' in n], 'lr': params.lr_beta},
+        ], eps=1e-5)
 
         episode_rewards = []
         test_returns = []
         test_episode_lengths = []
 
-        if params.switch_goal: print(f"Current goal {env.goal}")
+        #initialize batch processing class
+        batch_process = BatchProcessing()
 
+        if params.switch_goal: print(f"Current goal {env.goal}")
         n_ep = 0
 
         for it in range(params.train_iterations):
             buffer = []
-
             for ep in range(params.buffer_episodes):
-                state_h_history, state_l_history, state_beta_history = [],[],[]
-                beta_history, option_history, prev_option_history, reward_history = [],[],[],[]
-                logp_h_history, logp_l_history, v_h_history, v_l_history = [],[],[],[]
+                #initialize episode histories
+                state_history, action_history, reward_history, done_history = [],[],[],[]
+                option_history, prev_option_history, beta_history = [],[],[]
+                v_h_history, v_l_history, logp_h_history, logp_l_history  = [],[],[],[]
+                prediction_history, pi_hat_history = [],[]
 
+                #for troubleshooting only
+                pi_bar_history, beta_history = [],[]
 
+                #reset environment and convert to tensor
                 obs, _ = env.reset()
-                beta = th.Tensor([[1.0]])   #set initial beta to 1 to reselect option
-                prev_option = th.LongTensor([0]) #set initial prev_option to 0
+                prev_option = None
                 total_reward = 0
 
                 for t in range(params.t_max):
-                    #select option in high MDP
-                    state_h = actor_h.get_state(obs)
+                    state = pre_process(obs)
+                    #forward pass through network
                     with th.no_grad():
-                        option, logp_h, pi_hat = actor_h.get_policy(state_h, beta, prev_option)
+                        prediction = network(state)
 
-                    #select action in low MDP
-                    state_l = actor_l.get_state(obs, option)
-                    with th.no_grad():
-                        action, logp_l, pi_bar = actor_l.get_policy(state_l)
+                    #compute high MDP policy, logp, and sample option
+                    pi_hat = compute_pi_hat(prediction, prev_option)
+                    dist = Categorical(probs=pi_hat)
+                    option = dist.sample()
+                    logp_h = dist.log_prob(option)
 
-                    # print(f"Obs:{obs.shape}\n"
-                    #       f"state_h:{state_h.shape}\n"
-                    #       f"state_l:{state_l.shape}\n")
-                    # sys.exit()
-                    #compute values
-                    with th.no_grad():
-                        v_h, v_l = critic.get_values(state_l, pi_hat)
+                    #compute low MDP policy for current option, logp, and sample action
+                    pi_bar = prediction['pi_w'][0, option,:]
+                    dist = Categorical(probs=pi_bar)
+                    action = dist.sample()
+                    logp_l = dist.log_prob(action)
 
+                    #compute high and low MDP value functions
+                    v_bar = prediction['q_W'][:,option]  # q value for current option
+                    v_hat = (prediction['q_W'] * pi_hat).sum(-1).unsqueeze(-1)  # weighted sum of q for each option
 
                     #take a step
                     next_obs, reward, terminated, truncated, _ = env.step(action)
 
-                    #compute beta for next state-option TODO: final state condition?
-                    state_beta = beta_net.get_state(next_obs, option)
-                    with th.no_grad():
-                        beta = beta_net(state_beta)
-
-                    #store transition data
-                    state_h_history.append(state_h)
-                    state_l_history.append(state_l)
-                    state_beta_history.append(state_beta)
+                    #store transition in episode history
+                    state_history.append(state)
+                    action_history.append(action)
                     reward_history.append(reward)
-                    beta_history.append(beta)
                     option_history.append(option)
-                    prev_option_history.append(prev_option)
-                    v_h_history.append(v_h)
-                    v_l_history.append(v_l)
+                    prev_option_history.append(prev_option if prev_option is not None else th.LongTensor([0]))
+                    v_h_history.append(v_hat)
+                    v_l_history.append(v_bar)
                     logp_h_history.append(logp_h)
                     logp_l_history.append(logp_l)
+                    pi_hat_history.append(pi_hat)
+
+                    #For testing only
+                    pi_bar_history.append(pi_bar)
+                    beta_history.append(prediction['betas'])
 
                     obs = next_obs
                     prev_option = option
                     total_reward += reward
 
                     if terminated or truncated:  # Optional for printing train episode lengths
-                        print(f"****training episode {n_ep+1}: {t+1} steps ****")
+                        # print(f"****training episode {n_ep + 1}: {t + 1} steps ****")
+                        pass
 
                     # logic for episode termination/truncation
                     if truncated:  # Compute next value if episode env timelimit is reached
-                        # compute values
-                        next_state_l = actor_l.get_state(next_obs, option)
                         with th.no_grad():
-                            next_v_h, next_v_l = critic.get_values(next_state_l, pi_hat)
-                        v_h_history.append(next_v_h)
-                        v_l_history.append(next_v_l)
+                            prediction = network(pre_process(obs))
+                        pi_hat = compute_pi_hat(prediction, prev_option)
+                        next_v_bar = prediction['q_W'].gather(1, option.unsqueeze(-1))
+                        next_v_hat = (prediction['q_W'] * pi_hat).sum(-1).unsqueeze(-1)
+                        v_h_history.append(next_v_hat)
+                        v_l_history.append(next_v_bar)
                         break
                     if terminated:  # Compute next value = 0 if terminal state reached
-                        next_value = th.zeros_like(v_h)
+                        next_value = th.zeros_like(v_hat)
                         v_h_history.append(next_value)
                         v_l_history.append(next_value)
                         break
-
                 n_ep += 1
-                episode_rewards.append(episode_rewards)
+                episode_rewards.append(total_reward)
 
-                #compute advantages and returns for episode
+                # compute advantages and returns for episode
                 returns, adv_h, adv_l = compute_GAE(reward_history, v_h_history, v_l_history,
                                                     params.gamma, params.gae_lambda, params.device)
 
-                #store episode in buffer
-                buffer.append((state_h_history, state_l_history, state_beta_history,
-                               option_history, prev_option_history, beta_history,
-                               returns, adv_h, adv_l, logp_h_history, logp_l_history,
-                               v_h_history, v_l_history))
+                # store episode in buffer
+                buffer.append((state_history, action_history, pi_hat_history,
+                               option_history, prev_option_history,
+                               v_h_history, v_l_history,
+                               logp_h_history, logp_l_history,
+                               returns, adv_h, adv_l, pi_bar_history, beta_history))
 
                 # test at interval and print result
                 if n_ep % params.test_interval == 0:
-                    # show_testing = False if n_ep < params.render_delay and params.show_testing else True
-                    test_return, episode_length = self.test(deepcopy(actor_h),deepcopy(actor_l),deepcopy(beta_net), params, n_ep, env.goal)
+                    test_return, episode_length = self.test(deepcopy(network), params, n_ep, env.goal)
                     test_returns.append(test_return)
                     test_episode_lengths.append(episode_length)
                     print(f'Test return at episode {n_ep}: {test_return:.3f} | '
@@ -146,80 +147,92 @@ class DACtrainer():
                     print(f"New goal {env.goal}")
 
             # process buffer once full
-            batch_process = BatchProcessing()
-            (states_h_mb, states_l_mb, states_beta_mb,
-             options_mb, prev_options_mb, betas_mb,
-             returns_mb, adv_h_mb, adv_l_mb,
-             logp_h_mb, logp_l_mb, v_h_mb, v_l_mb) = batch_process.collate_batch(buffer, params.device)
+            (states_mb, actions_mb, pi_hat_mb,
+             options_mb, prev_options_mb,
+             v_h_mb, v_l_mb, logp_h_mb, logp_l_mb,
+             returns_mb, adv_h_mb, adv_l_mb, pi_bar_mb, betas_mb) = batch_process.collate_batch(buffer, params.device)
 
             # convert to dataset and initialize dataloader for mini_batch sampling
-            dataset = th.utils.data.TensorDataset(states_h_mb, states_l_mb, states_beta_mb,
-                                                  options_mb, prev_options_mb, betas_mb,
-                                                  returns_mb, adv_h_mb, adv_l_mb,
-                                                  logp_h_mb, logp_l_mb, v_h_mb, v_l_mb)
+            dataset = th.utils.data.TensorDataset(states_mb, actions_mb, pi_hat_mb,
+                                                         options_mb, prev_options_mb,
+                                                         v_h_mb, v_l_mb, logp_h_mb, logp_l_mb,
+                                                         returns_mb, adv_h_mb, adv_l_mb, pi_bar_mb)
 
             dataloader = th.utils.data.DataLoader(dataset, batch_size=params.mini_batch_size, shuffle=True)
 
-            #Optimize model
-            for _ in range(params.opt_epochs):
-                for batch in dataloader:
-                    #unpack mini batch
-                    (states_h_mb, states_l_mb, states_beta_mb,
-                     options_mb, prev_options_mb, betas_mb,
-                     returns_mb,adv_h_mb, adv_l_mb,
-                     logp_h_mb, logp_l_mb, v_h_mb, v_l_mb) = batch
+            #initiate learning
+            mdps = ['hat', 'bar']
+            # np.random.shuffle(mdps)
+            self.learn(network, dataloader, opt, params, mdps[1])
+            self.learn(network, dataloader, opt, params, mdps[0])
 
-                    #high actor loss
-                    opt_actor_h.zero_grad()
-                    _, new_logp_h, pi_hat = actor_h.get_policy(states_h_mb, betas_mb, prev_options_mb)
-                    entropy_h = Categorical(probs=pi_hat).entropy().mean()
-                    loss_actor_h = actor_h.actor_loss(new_logp_h, logp_h_mb, adv_h_mb)
-                    loss_actor_h += -params.entropy_coef * entropy_h
-                    loss_actor_h.backward()
-                    opt_actor_h.step()
+        return episode_rewards, test_returns, test_episode_lengths
 
-                    #low actor loss
-                    opt_actor_l.zero_grad()
-                    _, new_logp_l, pi_bar = actor_l.get_policy(states_l_mb)
-                    entropy_l = pi_bar.entropy().mean()
-                    loss_actor_l = actor_l.actor_loss(new_logp_l, logp_l_mb, adv_l_mb)
-                    loss_actor_l += -params.entropy_coef * entropy_l
-                    loss_actor_l.backward()
-                    opt_actor_l.step()
+    def learn(self, network, dataloader, opt, params, mdp):
+        loss_p, loss_c = [], []
+        for epoch in range(params.opt_epochs):
+            for batch in dataloader:
+                # unpack mini batch
+                (states_mb, actions_mb, pi_hat_mb,
+                 options_mb, prev_options_mb,
+                 v_h_mb, v_l_mb,
+                 old_logp_h, old_logp_l,
+                 returns_mb, adv_h_mb, adv_l_mb, pi_bar_mb)  = batch
 
-                    #beta network loss TODO: beta_reg??
-                    opt_beta.zero_grad()
-                    loss_beta = beta_net.beta_loss(states_beta_mb, _,adv_l_mb)
-                    loss_beta.backward()
-                    opt_beta.step()
+                #forward pass minibatch states
+                prediction = network(states_mb)
 
-                    #critic loss
-                    opt_critic.zero_grad()
-                    new_v_h, new_v_l = critic.get_values(states_l_mb, pi_hat.detach())
-                    loss_critic_h = critic.critic_loss(new_v_h, v_h_mb, returns_mb)
-                    loss_critic_l = critic.critic_loss(new_v_l, v_l_mb, returns_mb)
-                    loss_critic = loss_critic_h + loss_critic_l
-                    loss_critic.backward()
-                    opt_critic.step()
+                #Get new policies and values for each MDPNew calculations
+                if mdp == 'hat':
+                    #High policy
+                    new_pi_hat = compute_pi_hat(prediction, prev_options_mb.view(-1))
+                    dist = Categorical(probs=new_pi_hat)
+                    new_logp = dist.log_prob(options_mb.view(-1)).unsqueeze(-1)
+                    entropy = dist.entropy().mean()
 
-                    # loss = loss_actor_h + loss_actor_l + loss_beta + loss_critic
-                    # print(f"Optimization epoch {_}:\n"
-                    #       f"Actor loss h: {loss_actor_h}\n"
-                    #       f"Actor loss l: {loss_actor_l}\n"
-                    #       f"critic loss h: {loss_critic_h}\n"
-                    #       f"critic loss l: {loss_critic_l}\n"
-                    #       f"beta loss: {loss_beta}\n")
+                    #High value
+                    new_v = (prediction['q_W'] * pi_hat_mb).sum(-1).unsqueeze(-1)
 
-                    # loss.backward()
-                    # opt.step()
+                elif mdp == 'bar':
+                    #Low policy
+                    new_pi_bar = prediction['pi_w'][th.arange(states_mb.size(0)), options_mb.view(-1),:]
+                    dist = Categorical(probs=new_pi_bar)
+                    new_logp = dist.log_prob(actions_mb.view(-1)).unsqueeze(-1)
+                    entropy = dist.entropy().mean()
 
+                    #Low value
+                    new_v = prediction['q_W'].gather(1, options_mb)
+                else:
+                    raise NotImplementedError
 
+                #PPO Actor loss with entropy
+                tau = params.entropy_coef_h if mdp == 'hat' else params.entropy_coef_l
+                old_logp = old_logp_h if mdp == 'hat' else old_logp_l
+                advantages = adv_h_mb if mdp == 'hat' else adv_l_mb
+                policy_loss = network.actor_loss(new_logp, old_logp, advantages, params.eps_clip)
+                policy_loss -= entropy * tau
+
+                #critic loss
+                old_v = v_h_mb if mdp == 'hat' else v_l_mb
+                critic_loss = network.critic_loss(new_v, old_v, returns_mb, params.eps_clip)
+
+                #backpropegate
+                opt.zero_grad()
+                (policy_loss + critic_loss).backward()
+                opt.step()
+
+                loss_p.append(policy_loss)
+                loss_c.append(critic_loss)
+
+        #Optional print average optimization losses
+        # av_loss_p, av_loss_c = sum(loss_p) / len(loss_p), sum(loss_c) / len(loss_c)
+        # print(f"MDP-{mdp}, optimization complete avg losses: Policy loss: {av_loss_p:.3f} | Critic loss: {av_loss_c:.3f}")
 
     @staticmethod
-    def test(actor_h, actor_l, beta_net, params, n_ep, goal):
+    def test(network, params, n_ep, goal):
         """tests agent and averages result, configure whether to show (render)
             testing and how long to delay in ParametersPPO class"""
-        # print("TESTING"); return None, None
+        network.train(mode=False)
         render_testing = params.show_testing and n_ep > params.render_delay
 
         if params.env_name == 'FourRooms':
@@ -237,32 +250,45 @@ class DACtrainer():
 
         for i in range(params.test_episodes):
             obs, _ = test_env.reset()
+            state = pre_process(obs)
             rewards = []
 
-            beta = th.Tensor([[1.0]])
-            prev_option = np.array([0])
+            prev_option = None
 
             for t in range(params.t_max):
-                #get option
-                state_h = actor_h.get_state(obs)
-                option, _,_ = actor_h.get_policy(state_h, beta, prev_option)
+                #pass through network
+                prediction = network(state)
 
-                #get action
-                state_l = actor_l.get_state(obs, option)
-                action, _,_ = actor_l.get_policy(state_l)
+                # compute high MDP policy and sample option
+                pi_hat = compute_pi_hat(prediction, prev_option).squeeze(0)
+                dist = Categorical(probs=pi_hat)
+                option = dist.sample()
 
-                #take step
-                next_obs, reward, done, trunc, _ = test_env.step(action.item())
+                # compute low MDP policy for current option and sample action
+                pi_w = prediction['pi_w']
+                pi_bar = pi_w[0, option, :].squeeze(0)
+                dist = Categorical(probs=pi_bar)
+                action = dist.sample()
 
-                #get option termination beta
-                state_beta = beta_net.get_state(next_obs, option)
-                beta = beta_net(state_beta)
+                #take a step
+                next_obs, reward, terminated, trunc, _ = test_env.step(action)
+                done = terminated or trunc
 
-                test_env.render()
+                if params.show_testing:
+                    q_w = prediction['q_W'].detach().squeeze(0)
+                    betas = prediction['betas'].squeeze(0)
+                    pi_bar = pi_bar.squeeze(0)
+                    # render environment, including metrics
+                    test_env.render(i, text_top=f"Option={option.item()}, Prev={prev_option} | q=[{q_w[0]:.1f},{q_w[1]:.1f},{q_w[2]:.1f},{q_w[3]:.1f}]",
+                                    text_bot=f"pi_bar,hat,beta = [{pi_bar[0]:.1f},{pi_bar[1]:.1f},{pi_bar[2]:.1f},{pi_bar[3]:.1f}], "
+                                             f"[{pi_hat[0]:.1f},{pi_hat[1]:.1f},{pi_hat[2]:.1f},{pi_hat[3]:.1f}], "
+                                             f"[{betas[0]:.1f},{betas[1]:.1f},{betas[2]:.1f},{betas[3]:.1f}]"
+                                    )
 
                 rewards.append(reward)
-                # total_reward += reward
-                obs = next_obs
+                state = pre_process(next_obs)
+                prev_option = option
+
                 if done or trunc:
                     episode_lengths[i] = t + 1
                     break
@@ -281,4 +307,3 @@ class DACtrainer():
         average_return = np.mean(test_returns)
 
         return average_return, average_length
-
