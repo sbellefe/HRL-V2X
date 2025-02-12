@@ -143,11 +143,9 @@ class PPOtrainer:
                     loss_p.append(actor_loss)
                     loss_c.append(critic_loss)
 
-            av_loss_p = sum(loss_p) / len(loss_p)
-            av_loss_c = sum(loss_c) / len(loss_c)
-            print(f"Optimization complete avg losses: "
-                  f"Policy loss: {av_loss_p:.3f} | "
-                  f"Critic loss: {av_loss_c:.3f}")
+            # Optional print average optimization losses
+            # av_loss_p, av_loss_c = sum(loss_p)/len(loss_p), sum(loss_c)/len(loss_c)
+            # print(f"Optimization avg losses: Policy loss: {av_loss_p:.3f} | Critic loss: {av_loss_c:.3f}")
 
         print("Trial complete")
         return episode_rewards, test_returns, test_episode_lengths

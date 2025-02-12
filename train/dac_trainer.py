@@ -26,7 +26,7 @@ class DACtrainer():
             {'params': [p for n, p in network.named_parameters() if 'actor' in n], 'lr': params.lr_ha},     #master policy
             {'params': [p for n, p in network.named_parameters() if 'critic' in n], 'lr': params.lr_critic},
             {'params': [p for n, p in network.named_parameters() if 'beta' in n], 'lr': params.lr_beta},
-        ], eps=1e-5)
+        ])
 
         episode_rewards = []
         test_returns = []

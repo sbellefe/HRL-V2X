@@ -3,7 +3,7 @@ import numpy as np
 from util.benchmarker import Utils
 
 
-class ALGOrunner():
+class ALGO_Runner():
     def __init__(self, env, trainer):
         self.env = env
         self.trainer = trainer

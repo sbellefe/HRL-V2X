@@ -4,7 +4,7 @@ import gymnasium as gym
 from env.fourrooms import FourRooms, FourRooms_m
 
 # Import runner, trainers, and parameters classes here
-from runner.runner import ALGOrunner
+from runner.runner import ALGO_Runner
 from train.ppo_trainer import PPOtrainer
 from train.oc_trainer import OCtrainer
 from train.dac_trainer import DACtrainer
@@ -49,7 +49,7 @@ def main():
     # TODO: add logic for discrete vs. continuous spaces?
 
     #define runner and run experiment
-    runner = ALGOrunner(env, trainer)
+    runner = ALGO_Runner(env, trainer)
     runner.run_experiment(params)
 
 if __name__ == "__main__":
