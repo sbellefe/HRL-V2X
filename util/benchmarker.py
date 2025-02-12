@@ -18,7 +18,9 @@ class Utils:
         all_train_returns = np.array(all_train_returns)
         all_test_returns = np.array(all_test_returns)
         all_test_lengths = np.array(all_test_lengths)
+        # print(all_test_returns.shape)
 
+        """Overall benchmarking"""
         # Calculate the mean and 95% confidence intervals
         mean_train_returns = all_train_returns.mean(axis=0)
         mean_test_returns = all_test_returns.mean(axis=0)
@@ -41,14 +43,30 @@ class Utils:
         margin_of_error = t_value * sample_std / np.sqrt(n)
         avg_max_return_ci = margin_of_error
 
-        # # Apply moving average to smooth the training returns
-        # smoothed_mean_train_returns = np.convolve(mean_train_returns, np.ones(moving_avg_window) / moving_avg_window, mode='valid')
-        # smoothed_train_ci = np.convolve(train_ci, np.ones(moving_avg_window) / moving_avg_window, mode='valid')
-        #
-        # # Down-sample the training returns for plotting
-        # down_sampled_indices = np.arange(0, len(smoothed_mean_train_returns), down_sample_factor)
-        # down_sampled_mean_train_returns = smoothed_mean_train_returns[down_sampled_indices]
-        # down_sampled_train_ci = smoothed_train_ci[down_sampled_indices]
+        """Transfer learning benchmarking"""
+        #split arrays in half (before and after goal switch)
+        halfway_point = num_points // 2
+        test_returns_g1 = all_test_returns[:,:halfway_point]
+        test_returns_g2 = all_test_returns[:,halfway_point:]
+
+        #compute max return for each half
+        max_returns_g1 = [np.max(trial_returns) for trial_returns in test_returns_g1]
+        max_returns_g2 = [np.max(trial_returns) for trial_returns in test_returns_g2]
+
+        #compute average max return
+        avg_max_return_g1 = np.mean(max_returns_g1)
+        avg_max_return_g2 = np.mean(max_returns_g2)
+        avg_max_return_g1g2 = [avg_max_return_g1, avg_max_return_g2]
+
+        # Calculate the 95% confidence interval
+        n = len(max_returns_g1)
+        sample_std_g1 = np.std(max_returns_g1, ddof=1)
+        sample_std_g2 = np.std(max_returns_g2, ddof=1)
+        t_value = st.t.ppf(1 - 0.025, df=n - 1)
+        avg_max_return_ci_g1 = t_value * sample_std_g1 / np.sqrt(n)
+        avg_max_return_ci_g2 = t_value * sample_std_g2 / np.sqrt(n)
+        avg_max_return_ci_g1g2 = [avg_max_return_ci_g1, avg_max_return_ci_g2]
+
         """Plot test episode lengths"""
         plt.figure(figsize=(12, 6))
         episodes = np.arange(0, num_points * test_interval, test_interval)
@@ -107,4 +125,5 @@ class Utils:
         # plt.legend()
         # plt.show()
 
-        return mean_test_returns, avg_max_return, avg_max_return_ci, individual_max_returns
+        return (mean_test_returns, avg_max_return, avg_max_return_ci, individual_max_returns,
+                avg_max_return_g1g2, avg_max_return_ci_g1g2)

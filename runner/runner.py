@@ -40,11 +40,12 @@ class ALGO_Runner():
             all_test_lengths = np.load('all_test_lengths.npy')
 
         utils = Utils()
-        average_returns, max_return, max_return_ci, individual_returns = utils.benchmark_plot(all_train_returns,
+        average_returns, max_return, max_return_ci, individual_returns, g1g2_ret, g1g2_ci = utils.benchmark_plot(all_train_returns,
                                                                                               all_test_returns, all_test_lengths,
                                                                                               params.test_interval)
         print(f"Average Return: {np.round(average_returns, 2)}")
-        print(f"Max Return: {max_return:.3f}")
-        print(f"Max Return 95% CI: {max_return_ci:.3f}")
-        print(f"Individual Max Returns: {np.round(individual_returns, 3)}")
+        print(f"Overall Max Return w/ 95% CI: {max_return:.3f} +- {max_return_ci:.3f}")
+        print(f"Individual Run Overall Max Returns: {np.round(individual_returns, 3)}")
+        print(f"Max Return for Goal 1 w/ 95% CI: {g1g2_ret[0]:.3f} +- {g1g2_ci[0]:.3f}")
+        print(f"Max Return for Goal 2 w/ 95% CI: {g1g2_ret[1]:.3f} +- {g1g2_ci[1]:.3f}")
         print("Completed experiment")
