@@ -3,6 +3,10 @@ import torch as th
 import random
 from collections import deque
 
+
+# def pre_process(obs):
+#     state = th.FloatTensor(obs).unsqueeze(0)
+#     return state
 def pre_process(obs):
     obs = np.asarray(obs)
     obs = th.from_numpy(obs).float()

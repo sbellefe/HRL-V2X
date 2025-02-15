@@ -9,29 +9,20 @@ from math import exp
 import numpy as np
 from helpers.oc_helper import pre_process
 
-# class OC_MasterPolicy(nn.Module):
-#     """"""
-#     def __init__(self, params):
-#         super(OC_MasterPolicy, self).__init__()
-#         self.device = params.device
-#         self.temp = params.temp
-#         self.fc1 = nn.Linear(params.state_dim, params.num_options)
-#         self.fc2 = nn.Linear(params.state_size, params.state_size)
-#
-#
-#     def forward(self, state):
-#         x = state
-#         q = self.fc1(x)
-#         return q
-#
-#     def get_pi_hat(self, state):
-#         q = self.forward(state)
-#         policy = F.softmax(q / self.temperature, dim=-1)
-#         return policy
-#
-#     def sample_options(self, state):
-#         pi_hat = self.get_pi_hat(state)
+class SingleOptionMLP(nn.Module):
+    """Class for a single option policy"""
+    def __init__(self, input_dim, hidden_dim, output_dim):
+        super(SingleOptionMLP, self).__init__()
+        self.net = nn.Sequential(
+            nn.Linear(input_dim, hidden_dim[0]),
+            nn.ReLU(),
+            nn.Linear(hidden_dim[0], hidden_dim[1]),
+            nn.ReLU(),
+            nn.Linear(hidden_dim[1], output_dim)
+        )
 
+    def forward(self, x):
+        return self.net(x)
 
 
 class OptionCritic(nn.Module):
@@ -40,26 +31,40 @@ class OptionCritic(nn.Module):
         self.device = params.device
 
         #define shared state representation network
-        self.features = nn.Sequential(
-            nn.Linear(params.state_dim, params.phi_hidden_dim),
+        self.features = nn.Linear(params.state_dim, params.feature_dim)
+
+        #define Q-network
+        self.Q_net = nn.Sequential(
+            nn.Linear(params.feature_dim, params.hidden_dim[0]),
             nn.ReLU(),
-            nn.Linear(params.phi_hidden_dim, params.phi_output_dim),
-            nn.ReLU()
+            nn.Linear(params.hidden_dim[0], params.hidden_dim[1]),
+            nn.ReLU(),
+            nn.Linear(params.hidden_dim[1], params.num_options)
         )
 
-        #define: Q-network, beta-network
-        self.Q_net = nn.Linear(params.phi_output_dim, params.num_options)
-        self.beta_net = nn.Linear(params.phi_output_dim, params.num_options)
+        #define beta-network
+        self.beta_net = nn.Sequential(
+            nn.Linear(params.feature_dim, params.hidden_dim[0]),
+            nn.ReLU(),
+            nn.Linear(params.hidden_dim[0], params.hidden_dim[1]),
+            nn.ReLU(),
+            nn.Linear(params.hidden_dim[1], params.num_options)
+        )
 
-        #define sub-policy network weights and biases
-        self.options_W = nn.Parameter(th.zeros(params.num_options, params.phi_output_dim, params.action_dim))
-        self.options_b = nn.Parameter(th.zeros(params.num_options, params.action_dim))
+        #define sub-policy networks
+        self.options = nn.ModuleList([
+            SingleOptionMLP(params.feature_dim, params.hidden_dim, params.action_dim)
+            for _ in range(params.num_options)
+        ])
 
         self.to(self.device)
+        self.train(mode=True)
 
     def get_state(self, obs):
         """pass observation through shared phi network to get state"""
-        obs = obs.unsqueeze(0).to(self.device)
+        if obs.ndim < 4:
+            obs = obs.unsqueeze(0)
+        obs = obs.to(self.device)
         state = self.features(obs)
         return state
 
@@ -77,12 +82,6 @@ class OptionCritic(nn.Module):
     def get_beta(self, state, current_option):
         """pass state through beta network and slice to get current beta,
             select epsilon-greedy next-option. Used for non-initial states"""
-        # beta_t = self.beta_net(state)#.sigmoid()
-        # print(f"current option: {current_option}\n"
-        #       f"state: {state.shape}\n"
-        #       f"beta probs: {beta_t}\n"
-        #       f"current_beta: {beta_t[0]}\n")
-        # sys.exit()
 
         #get termination probability for current option
         beta_prob = self.beta_net(state)[:,current_option].sigmoid()
@@ -105,8 +104,8 @@ class OptionCritic(nn.Module):
                         logp: log probability density/mass function evaluated at sampled action
                         entropy: computed entropy of the output distribution
                 """
-        # matrix mult of weight and bias for option, ie pass thru
-        logits = state.data @ self.options_W[option] + self.options_b[option]
+        #pass thru current option network
+        logits = self.options[option](state)
 
         # compute probability over actions using temp for exploration
         action_dist = (logits / temperature).softmax(dim=-1)

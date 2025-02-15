@@ -35,7 +35,7 @@ class DAC_SingleOptionNet(nn.Module):
         """accepts raw state tensor as input"""
         x = state
 
-        #pass through option policy net and get log prob
+        #pass through option policy network
         x_pi = self.pi_gate(self.pi_fc1(x))
         x_pi = self.pi_gate(self.pi_fc2(x_pi))
         logits_pi = self.pi_fc3(x_pi)
@@ -82,7 +82,7 @@ class DAC_Network(nn.Module):
         x = state
 
         #pass through each option network and stack outputs
-        pi_w, log_pi_w, beta_w = [],[],[]
+        pi_w, beta_w = [],[]
         for option in self.options:
             pi_w_, beta_w_ = option(x)
             pi_w.append(pi_w_)

@@ -4,7 +4,6 @@ import gymnasium as gym
 from itertools import count
 import numpy as np
 import torch as th
-from torch.distributions import Categorical
 
 from env.fourrooms import FourRooms, FourRooms_m
 from agent.oc import OptionCritic
@@ -18,21 +17,33 @@ class OCtrainer:
     def train(self, env, params):
         device = params.device
 
-        agent = OptionCritic(params)
+        agent = OptionCritic(params).to(device)
         agent_prime = deepcopy(agent)
-        opt = th.optim.Adam(agent.parameters(), lr=params.lr)
+        # opt = th.optim.RMSprop(agent.parameters(), lr=params.lr)
+        # for name, param in agent.named_parameters():
+        #     print(name, param.shape)
+        # sys.exit()
+        opt = th.optim.Adam([
+            {'params': [p for n, p in agent.named_parameters() if 'Q' in n], 'lr': params.lr_q},  # critic (master policy)
+            {'params': [p for n, p in agent.named_parameters() if 'beta' in n], 'lr': params.lr_beta},  # beta
+            {'params': [p for n, p in agent.named_parameters() if 'options' in n], 'lr': params.lr_la}, #sub -policies
+            {'params': [p for n, p in agent.named_parameters() if 'features' in n], 'lr': params.lr_phi}, #features
+        ])
+
+
         buffer = ReplayBuffer(params.buffer_size)
 
         episode_rewards = []
         test_returns = []
         test_episode_lengths = []
+        episode_lengths = []
 
         params.t_tot = 0
         n_ep = 0
 
         if params.switch_goal: print(f"Current goal {env.goal}")
+        running_av_length = 0
 
-        # while params.t_tot < 4e6: #could change to Count()???
         for _ in count():
 
             episode_reward = 0
@@ -50,7 +61,6 @@ class OCtrainer:
             curr_op_len = 0
 
             #Episode loop
-            # for t in range(params.t_max):
             while not done and ep_steps < params.t_max:
                 epsilon = params.epsilon #get current epsilon
 
@@ -75,7 +85,9 @@ class OCtrainer:
                 episode_reward += reward
 
                 if done:  # Optional for printing train episode lengths
-                    print(f"****training episode {n_ep+1}: {ep_steps+1} steps ****")
+                    # print(f"****training episode {n_ep+1}: {ep_steps+1} steps | epsilon = {epsilon:.3f} ****")
+                    episode_lengths.append(ep_steps+1)
+                    running_av_length += ep_steps+1
 
                 actor_loss, critic_loss = None, None
                 if len(buffer) > params.batch_size:
@@ -91,6 +103,7 @@ class OCtrainer:
 
                     opt.zero_grad()
                     loss.backward()
+                    th.nn.utils.clip_grad_norm_(agent.parameters(), params.gradient_clip)
                     opt.step()
 
                     #hard update target network at interval
@@ -116,14 +129,15 @@ class OCtrainer:
 
             # test at interval and print result
             if n_ep % params.test_interval == 0:
-                # show_testing = False if n_ep < params.render_delay and params.show_testing else True
                 test_return, episode_length = self.test(deepcopy(agent), params, n_ep, env.goal)
                 test_returns.append(test_return)
                 test_episode_lengths.append(episode_length)
+                running_av_len = sum(episode_lengths[-10:]) / 10
                 print(f'Test return at episode {n_ep}: {test_return:.3f} | '
-                      f'Average test episode length: {episode_length} | '
+                      f'Average test (train) episode length: {episode_length} ({running_av_len:.1f}) | '
                       f'Total steps: {params.t_tot} | '
                       f'Epsilon: {params.epsilon:.3f}')
+
 
             # Switch Goal location and experiment termination
             if params.switch_goal and n_ep == params.total_train_episodes / 2:
@@ -140,6 +154,7 @@ class OCtrainer:
         """tests agent and averages result, configure whether to show (render)
                     testing and how long to delay in ParametersPPO class"""
         render_testing = params.show_testing and n_ep > params.render_delay
+        agent.train(mode=False)
 
         if params.env_name == 'FourRooms':
             test_env = FourRooms(render_mode="human") if render_testing else FourRooms()
@@ -165,8 +180,12 @@ class OCtrainer:
             beta = True
 
             for t in range(params.t_max):
+
                 if beta: # epsilon-greedy option selection with eps_test
-                   current_option = np.random.choice(params.num_options) if np.random.rand() < params.eps_test else greedy_option
+                   if np.random.rand() < params.eps_test:
+                       current_option = np.random.choice(params.num_options)
+                   else:
+                       current_option = greedy_option
 
                 action, _, _ = agent.get_action(state, current_option, params.temp)
 

@@ -9,7 +9,12 @@ class Utils:
     def __init__(self):
         pass
 
-    def benchmark_plot(self, all_train_returns, all_test_returns, all_test_lengths, test_interval, moving_avg_window=100, down_sample_factor=100):
+
+    def benchmark_plot(self, all_train_returns,
+                       all_test_returns,
+                       all_test_lengths,
+                       test_interval,
+                       store_avg_test=True):
         """Data processing and calculations"""
         num_trials = len(all_train_returns)
         num_points = len(all_test_returns[0])
@@ -125,5 +130,67 @@ class Utils:
         # plt.legend()
         # plt.show()
 
+
+        if store_avg_test:
+            returns_and_ci = [mean_test_returns, test_ci]
+            lengths_and_ci = [mean_test_lengths, test_len_ci]
+            np.save('returns_and_ci.npy', returns_and_ci)
+            np.save('lengths_and_ci.npy', lengths_and_ci)
+
+
         return (mean_test_returns, avg_max_return, avg_max_return_ci, individual_max_returns,
                 avg_max_return_g1g2, avg_max_return_ci_g1g2)
+
+    def multi_benchmark(self):
+        """Run benchmarking of multiple algorithms by running this script.
+            ensure logdir contains files for each algorithm in the format:
+                returns_and_ci_ALGO.npy
+                lengths_and_ci_ALGO.npy                """
+        logdir = "../figs/multi_plot"
+        algos = ["OC", "PPO", "DAC"]
+        colours = ["green", "red", "blue"]
+        num_points = 200; test_interval = 10
+        episodes = np.arange(0, num_points * test_interval, test_interval)
+
+        #load algorithm results into dictionary
+        results = {}
+        for algo in algos:
+            algo_returns = np.load(logdir + f"/returns_and_ci_{algo}.npy")
+            algo_lengths= np.load(logdir + f"/lengths_and_ci_{algo}.npy")
+
+            results[f"returns_{algo}"] = algo_returns
+            results[f"lengths_{algo}"] = algo_lengths
+
+        #Test Return
+        plt.figure(figsize=(12, 6))
+        for algo, colour in zip(algos, colours):
+            returns = results[f"returns_{algo}"][0]
+            ci = results[f"returns_{algo}"][1]
+            plt.plot(episodes, returns, label=f'{algo}', color=colour)
+            plt.fill_between(episodes, returns - ci, returns + ci, color=colour, alpha=0.2)
+        plt.xlabel('Training Episodes')
+        plt.ylabel('Test Return')
+        plt.title('Test Returns with 95% Confidence Interval')
+        plt.grid(True)
+        plt.legend()
+        plt.savefig("../algo_returns.png")
+        plt.show()
+
+        # Test episode lengths
+        plt.figure(figsize=(12, 6))
+        for algo, colour in zip(algos, colours):
+            lengths = results[f"lengths_{algo}"][0]
+            ci = results[f"lengths_{algo}"][1]
+            plt.plot(episodes, lengths, label=f'{algo}', color=colour)
+            plt.fill_between(episodes, lengths - ci, lengths + ci, color=colour, alpha=0.2)
+        plt.xlabel('Training Episodes')
+        plt.ylabel('Test Episode Length')
+        plt.title('Test Episode Length with 95% Confidence Interval')
+        plt.grid(True)
+        plt.legend()
+        plt.savefig("../algo_lengths.png")
+        plt.show()
+
+if __name__ == "__main__":
+    utils = Utils()
+    utils.multi_benchmark()
