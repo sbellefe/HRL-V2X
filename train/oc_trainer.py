@@ -6,7 +6,7 @@ import numpy as np
 import torch as th
 
 from env.fourrooms import FourRooms, FourRooms_m
-from agent.oc import OptionCritic
+from agent.oc import OC_Network
 from helpers.oc_helper import ReplayBuffer, pre_process
 
 
@@ -17,7 +17,7 @@ class OCtrainer:
     def train(self, env, params):
         device = params.device
 
-        agent = OptionCritic(params).to(device)
+        agent = OC_Network(params).to(device)
         agent_prime = deepcopy(agent)
         # opt = th.optim.RMSprop(agent.parameters(), lr=params.lr)
         # for name, param in agent.named_parameters():
@@ -140,13 +140,15 @@ class OCtrainer:
 
 
             # Switch Goal location and experiment termination
-            if params.switch_goal and n_ep == params.total_train_episodes / 2:
-                env.switch_goal()
-                print(f"New goal {env.goal}")
+            if params.switch_goal and n_ep == params.total_train_episodes // 2:
+                env.switch_goal(goal=params.new_goal)
+                print(f"New goal {env.goal}. Max return so far: {max(test_returns):.3f}")
             if n_ep >= params.total_train_episodes:
                 break
 
-        print("Trial complete")
+        print(f"Trial Complete. Max test returns for: "
+              f"G1 = {max(test_returns[:len(test_returns) // 2]):.3f}, "
+              f"G2 = {max(test_returns[-len(test_returns) // 2:]):.3f}")
         return episode_rewards, test_returns, test_episode_lengths
 
     @staticmethod

@@ -8,9 +8,9 @@ Implementation and benchmarking of HRL algorithms in FourRooms Environment. Comp
 ## agent: 
 ppo.py: Contains ```PPOActor``` and ```PPOCritic``` classes.
 
-oc.py: Contains ```OptionCritic``` class.
+oc.py: Contains ```OC_SingleOptionNet``` and ```OC_Networks``` classes.
 
-dac.py: Contains ```DAC_SingleOptionNet``` and ```DAC_Network``` classes
+dac.py: Contains ```DAC_SingleOptionNet``` and ```DAC_Network``` classes.
 
 ## runner:
 runner.py: Contains ```ALGO_Runner``` class and the method ```run_experiment``` used for all algorithms.

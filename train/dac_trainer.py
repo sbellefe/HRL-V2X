@@ -26,6 +26,7 @@ class DACtrainer():
             {'params': [p for n, p in network.named_parameters() if 'actor' in n], 'lr': params.lr_ha},     #master policy
             {'params': [p for n, p in network.named_parameters() if 'critic' in n], 'lr': params.lr_critic},
             {'params': [p for n, p in network.named_parameters() if 'beta' in n], 'lr': params.lr_beta},
+            {'params': [p for n, p in network.named_parameters() if 'phi' in n], 'lr': params.lr_phi},
         ])
 
         episode_rewards = []
@@ -142,9 +143,9 @@ class DACtrainer():
                           f'Average test episode length: {episode_length}')
 
                 # Switch Goal location
-                if params.switch_goal and n_ep == params.total_train_episodes / 2:
-                    env.switch_goal()
-                    print(f"New goal {env.goal}")
+                if params.switch_goal and n_ep == params.total_train_episodes // 2:
+                    env.switch_goal(goal=params.new_goal)
+                    print(f"New goal {env.goal}. Max return so far: {max(test_returns):.3f}")
 
             # process buffer once full
             (states_mb, actions_mb, pi_hat_mb,
@@ -166,6 +167,9 @@ class DACtrainer():
             self.learn(network, dataloader, opt, params, mdps[1])
             self.learn(network, dataloader, opt, params, mdps[0])
 
+        print(f"Trial Complete. Max test returns for: "
+              f"G1 = {max(test_returns[:len(test_returns)//2]):.3f}, "
+              f"G2 = {max(test_returns[-len(test_returns)//2:]):.3f}")
         return episode_rewards, test_returns, test_episode_lengths
 
     def learn(self, network, dataloader, opt, params, mdp):
@@ -287,12 +291,12 @@ class DACtrainer():
 
                 rewards.append(reward)
                 state = pre_process(next_obs)
-                prev_option = option
+                prev_option = option.unsqueeze(0)
 
                 if done or trunc:
                     episode_lengths[i] = t + 1
                     break
-            test_rewards[i] = sum(rewards)  # Check if this works?
+            test_rewards[i] = sum(rewards)
 
             # compute discounted return
             gt = 0

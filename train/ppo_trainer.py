@@ -96,9 +96,9 @@ class PPOtrainer:
                           f'Average test episode length: {episode_length}')
 
                 #Switch Goal location
-                if params.switch_goal and n_ep == params.total_train_episodes/2:
-                    env.switch_goal()
-                    print(f"New goal {env.goal}")
+                if params.switch_goal and n_ep == params.total_train_episodes // 2:
+                    env.switch_goal(goal=params.new_goal)
+                    print(f"New goal {env.goal}. Max return so far: {max(test_returns):.3f}")
 
             #process buffer once full
             batch_process = BatchProcessing()
@@ -147,7 +147,9 @@ class PPOtrainer:
             # av_loss_p, av_loss_c = sum(loss_p)/len(loss_p), sum(loss_c)/len(loss_c)
             # print(f"Optimization avg losses: Policy loss: {av_loss_p:.3f} | Critic loss: {av_loss_c:.3f}")
 
-        print("Trial complete")
+        print(f"Trial Complete. Max test returns for: "
+              f"G1 = {max(test_returns[:len(test_returns) // 2]):.3f}, "
+              f"G2 = {max(test_returns[-len(test_returns) // 2:]):.3f}")
         return episode_rewards, test_returns, test_episode_lengths
 
     @staticmethod

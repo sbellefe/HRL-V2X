@@ -12,7 +12,7 @@ def pre_process(obs):
     state = th.FloatTensor(obs).unsqueeze(0)
     return state
 
-def compute_pi_hat(prediction, prev_option,t=None):
+def compute_pi_hat(prediction, prev_option):
     """computes high-policy (option selection) based on previous option, master policy & beta outputs.
         in the initial state, prev_option is set to None, function returns the master policy without
         beta contribution."""
@@ -29,10 +29,15 @@ def compute_pi_hat(prediction, prev_option,t=None):
 
     #create mask for the previous option(s)
     mask = th.zeros_like(pi_W)
-    mask[th.arange(pi_W.size(0)), prev_option] = 1
+    # mask[th.arange(pi_W.size(0)), prev_option] = 1
+    mask.scatter_(1, prev_option.unsqueeze(1), 1)
+
+    # Extract only the termination probability for the previously active option.
+    beta_prev = beta.gather(1, prev_option.unsqueeze(1))  # Shape: [batch_size, 1]
 
     #compute pi_hat by factoring in beta contribution
-    pi_hat = (1 - beta) * mask + beta * pi_W
+    # pi_hat = (1 - beta) * mask + beta * pi_W
+    pi_hat = (1 - beta_prev) * mask + beta_prev * pi_W
 
     return pi_hat  #tensor.shape[batch_size, 4]
 
@@ -160,9 +165,9 @@ class BatchProcessing:
                             batch_rtrn, batch_adv_h, batch_adv_l,
                             batch_betas, batch_pi_bar)
 
-        # if self.counter % 1 == 0:
-        #     self.plot_buffer(processed_buffer)
-        # self.counter += 1
+        if self.counter % 90 == 0 and False:  # *10 episodes per buffer
+            self.plot_buffer(processed_buffer)
+        self.counter += 1
 
         return processed_buffer
 
@@ -194,8 +199,8 @@ class BatchProcessing:
         for i in range(batch_betas.shape[1]):
             axes[0, 2].plot(range(len(batch_betas)), batch_betas[:, i].cpu().numpy(),label=f"Option {i}", alpha=0.7,  linestyle='dotted')
         axes[0, 2].set_title("Option Termination Probabilities (betas)")
-        axes[0, 2].set_xlabel("Termination Probability")
-        axes[0, 2].set_ylabel("Buffer Index")
+        axes[0, 2].set_ylabel("Termination Probability")
+        axes[0, 2].set_xlabel("Buffer Index")
         axes[0, 2].legend()
 
         # High-Level Advantage Estimates (Adv_H)

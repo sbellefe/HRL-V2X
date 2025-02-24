@@ -146,7 +146,7 @@ class Utils:
             ensure logdir contains files for each algorithm in the format:
                 returns_and_ci_ALGO.npy
                 lengths_and_ci_ALGO.npy                """
-        logdir = "../figs/multi_plot"
+        logdir = "../figs/_multi_plot"
         algos = ["OC", "PPO", "DAC"]
         colours = ["green", "red", "blue"]
         num_points = 200; test_interval = 10

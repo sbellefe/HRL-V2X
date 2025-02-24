@@ -9,10 +9,10 @@ from math import exp
 import numpy as np
 from helpers.oc_helper import pre_process
 
-class SingleOptionMLP(nn.Module):
+class OC_SingleOptionNet(nn.Module):
     """Class for a single option policy"""
     def __init__(self, input_dim, hidden_dim, output_dim):
-        super(SingleOptionMLP, self).__init__()
+        super(OC_SingleOptionNet, self).__init__()
         self.net = nn.Sequential(
             nn.Linear(input_dim, hidden_dim[0]),
             nn.ReLU(),
@@ -25,9 +25,9 @@ class SingleOptionMLP(nn.Module):
         return self.net(x)
 
 
-class OptionCritic(nn.Module):
+class OC_Network(nn.Module):
     def __init__(self, params):
-        super(OptionCritic, self).__init__()
+        super(OC_Network, self).__init__()
         self.device = params.device
 
         #define shared state representation network
@@ -53,7 +53,7 @@ class OptionCritic(nn.Module):
 
         #define sub-policy networks
         self.options = nn.ModuleList([
-            SingleOptionMLP(params.feature_dim, params.hidden_dim, params.action_dim)
+            OC_SingleOptionNet(params.feature_dim, params.hidden_dim, params.action_dim)
             for _ in range(params.num_options)
         ])
 

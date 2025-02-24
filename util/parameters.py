@@ -9,6 +9,7 @@ class SharedParams:
         self.render_delay = 289  # set an episode delay for rendering test episodes
         self.switch_goal = True  # switches goal halfway between total_train_episodes
         self.starting_goal = 62  # East doorway in FourRooms
+        self.new_goal = 25  # North Doorway (change to None for random selection)
 
         self.num_trials = 5
         self.total_train_episodes = 2000
@@ -42,10 +43,11 @@ class ParametersDAC(SharedParams):
         super(ParametersDAC, self).__init__()
 
         #Network hidden dimensions
-        hidden_dim = 128
-        self.option_hidden_units = (hidden_dim, hidden_dim) #hidden neurons for sub-policy and beta networks
-        self.actor_hidden_units = (hidden_dim, hidden_dim) #hidden neurons for master policy network
-        self.critic_hidden_units = (hidden_dim, hidden_dim) #not currently implemented, uses actor_hidden_units
+        dim = 64
+        self.feature_dim = 64
+        self.option_hidden_units = (dim, dim) #hidden neurons for sub-policy and beta networks
+        self.actor_hidden_units = (dim, dim) #hidden neurons for master policy network
+        self.critic_hidden_units = (dim, dim) #hidden neurons for critic network
 
         #hidden neuron activation functions lambda x: F.relu(x) or F.tanh(x)
         self.pi_l_activation = lambda x: F.tanh(x)     #option policies
@@ -55,7 +57,7 @@ class ParametersDAC(SharedParams):
 
         # training loop hyperparameters
         self.num_options = 4
-        self.buffer_episodes = 10  # num episodes in batch buffer
+        self.buffer_episodes = 5  # num episodes in batch buffer
         self.opt_epochs = 5  # num optimization epochs per batch buffer per mdp
         self.mini_batch_size = 64
         self.train_iterations = math.ceil(self.total_train_episodes / self.buffer_episodes)  # top-lvl loop index
@@ -65,6 +67,7 @@ class ParametersDAC(SharedParams):
         self.lr_la = 3e-4       #low actor (pi_w) learning rate
         self.lr_critic = 1e-3       #critic learning rate
         self.lr_beta = 1e-4     #beta network learning rate
+        self.lr_phi = 5e-4      #shared feature network learning rate
         self.eps_clip = 0.2     #ppo clipping parameter
         self.gamma = 0.99       #discount
         self.gae_lambda = 0.99      #GAE smoothing param

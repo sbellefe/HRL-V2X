@@ -100,9 +100,13 @@ wwwwwwwwwwwww
     #     self.ep_steps = 0
     #     return self.get_state(state), {}
 
-    def switch_goal(self):
+    def switch_goal(self, goal=None):
         prev_goal = self.goal
-        self.goal = self.rng.choice(self.init_states)
+        if goal is None:
+            self.goal = self.rng.choice(self.init_states)
+        else:
+            self.goal = goal
+        self.goal = 25  #located in north corridor
         self.init_states.append(prev_goal)
         self.init_states.remove(self.goal)
         assert prev_goal in self.init_states
@@ -309,9 +313,13 @@ class FourRooms_m(gym.Env):
     #     self.ep_steps = 0
     #     return self.get_state(state), {}
 
-    def switch_goal(self):
+    def switch_goal(self, goal=None):
         prev_goal = self.goal
-        self.goal = self.rng.choice(self.init_states)
+        if goal is None:
+            self.goal = self.rng.choice(self.init_states)
+        else:
+            self.goal = goal
+        self.goal = 25  #located in north corridor
         self.init_states.append(prev_goal)
         self.init_states.remove(self.goal)
         assert prev_goal in self.init_states
