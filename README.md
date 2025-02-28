@@ -42,6 +42,8 @@ fourrooms.py: Contains ```FouRooms``` and  ```FourRooms_m``` classes:
 ## util:
 
 benchmarker.py: Compute evaluation metrics, plot training and testing results.
+- Each run is benchmarked after completion
+- Additional method to benchmark multiple runs
 
 parameters.py: 
 - Hyperparameter classes for each algorithm
