@@ -1,7 +1,6 @@
-pygame
-gymnasium
 numpy
 torch
 matplotlib
 scipy
 seaborn
+pandas

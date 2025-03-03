@@ -1,12 +1,12 @@
 # Hierarchical RL
 
-Implementation and benchmarking of HRL algorithms in FourRooms Environment. Compares OC and DAC to standard Single RL PPO.
+Implementation and benchmarking of multi-agent HRL algorithms in V2X environments. Compares OC and DAC to IPPO.
 
 ## requirements: 
 ```pip install -r requirements.txt```
 
 ## agent: 
-ppo.py: Contains ```PPOActor``` and ```PPOCritic``` classes.
+ippo.py: Contains ```IPPOActor``` and ```IPPOCritic``` classes.
 
 oc.py: Contains ```OC_SingleOptionNet``` and ```OC_Networks``` classes.
 
@@ -16,7 +16,7 @@ dac.py: Contains ```DAC_SingleOptionNet``` and ```DAC_Network``` classes.
 runner.py: Contains ```ALGO_Runner``` class and the method ```run_experiment``` used for all algorithms.
 
 ## trainer:
-ppo_trainer.py: Contains ```PPOtrainer``` class with methods ```train```, ```test```.
+ippo_trainer.py: Contains ```IPPOtrainer``` class with methods ```train```, ```test```.
 
 oc_trainer.py: Contains ```OCtrainer``` class with methods ```train```, ```test```.
 
@@ -28,16 +28,19 @@ dac_trainer.py: Contains ```DACtrainer``` class with methods ```train```, ```lea
 
 Contains additional classes and functions for training algorithms (e.g. replay buffer, pre-processing...).
 
-## env:
-FourRooms Gridworlds:
+## V2X Env:
+Choose from:
+- ```NFIG```: single timestep game
+- ```SIG```: multi timestep game with channel and queue awareness
+- ```POSIG```: same as ```SIG``` but with partial observability (i.e. no access to global state)
 
-fourrooms.py: Contains ```FouRooms``` and  ```FourRooms_m``` classes:
+Env/SUMOData: Contains raw data in .csv files obtained from simulation.
 
-- Classes inherit from Gymnasium Env class
-- ```FouRooms``` is the original layout from OC paper
-- ```FourRooms_m``` is a modified layout with a zig-zag pattern
-- Both classes have pygame rendering and the ability to display real-time agent variable
-- For HRL agents, rendering will show variables including: current option, policies, beta...
+Environment.py: Contains ```Vehichle``` and ```Environ``` classes for managing vehicle positions and calculating fast fading & rewards.
+
+env_params.py: Contains ```V2Xparams``` class with environment configuration parameters.
+
+env_helper.py and /UtilityCommunication/veh_position_helper.py: Contains various helper code.
 
 ## util:
 
@@ -47,12 +50,11 @@ benchmarker.py: Compute evaluation metrics, plot training and testing results.
 
 parameters.py: 
 - Hyperparameter classes for each algorithm
-- Shared benchmarking hyperparameter class. Setup here to render the environment during testing. 
-
+- Merged with ```V2Xparams``` class
 
 ## main.py:
 
 Use this command in terminal to run code:
 
 ```python main.py --env MY_ENV_HERE --algo MY_ALGO_HERE```\
-e.g ```python main.py --env fourrooms --algo dac``` 
+e.g ```python main.py --env SIG --algo ippo``` 
