@@ -1,26 +1,78 @@
 import math
 import torch as th
 from torch.nn import functional as F
+from Env.env_params import V2Xparams #TODO: migrate relevant parts here
 
 class SharedParams:
     def __init__(self):
         self.device = th.device('cuda' if th.cuda.is_available() else 'cpu')
-        self.show_testing = False  # set to True to render test episodes
-        self.render_delay = 289  # set an episode delay for rendering test episodes
-        self.switch_goal = True  # switches goal halfway between total_train_episodes
-        self.starting_goal = 62  # East doorway in FourRooms
-        self.new_goal = 25  # North Doorway (change to None for random selection)
+        self.total_train_episodes = 100000  # number of control episodes
+        self.t_max = 10             # maximum number of time for control
+        self.num_agents = 1
+
 
         self.num_trials = 5
-        self.total_train_episodes = 2000
-        self.t_max = 1000
+
+        self.t_max_control = 120
         self.test_interval = 10  # test every 10 episodes
         self.test_episodes = 10  # test 10 episodes and get average results
 
+class ParametersV2X_N:
+    def __init__(self):
 
-class ParametersPPO(SharedParams):
+        self.num_agents = 1     #number of V2V links
+        self.t_max_control = 10  # control interval length (T)
+
+
+        #FROM MARL env_params (not all included yet)
+        # Driving Scenario Parameters
+        self.n_veh = 0                          # number of vehicles in total
+        self.n_veh_platoon = [2, 2, 2, 2]       # number of vehicles in each platoon
+        self.n_lane = 1                         # number of lanes in the platoon
+        self.number_of_SC = 4                   # number of sub-channels (SCs) for V2X communications
+
+        # Control Parameters
+        self.nb_episodes_control = 100000   # number of control episodes
+        # self.t_max_control = 10             # maximum number of time for control
+        self.nb_episodes_Test = 2           # number of Test episodes
+        self.NQ = 1                         # number of buffer size at each agent
+        self.CAM_size = 25600               # number of bits per cooperative awareness message (''CAM), in bits'
+        self.gamma_control = 0.99979        # discount factor of CL part
+        self.CL_pretrained = False          # using locally pretrained model
+        self.AoI_max = 6                    # maximum value of AoI at each agent
+        self.track_er_position_init = 1.5   # initialization of tracking position error
+        self.track_er_velocity_init = -1.0  # initialization of tracking velocity error
+        self.er_position_norm_range = 2.0   # normalization of position tracking error
+        self.er_velocity_norm_range = 1.5   # normalization of velocity tracking error
+        self.acceleration_norm_range = 2.6  # normalization of acceleration
+
+        # Communication Parameters
+        self.game_mode = 2  # 1: channel aware. 2: channel and queue aware. 3: channel, queue and AoI aware. 4: partial observability
+        self.n_step_per_episode_communication = 10  # number of communication time intervals within each control time unit
+        self.BW_per_SC = 1000000  # bandwidth of each sub-channel, in Hz
+        self.reward_w1 = 0.001  # reward weight corresponding to V2I
+        self.reward_w2 = 0.1  # reward weight corresponding to V2V data rate
+        self.reward_w3 = 1  # reward weight corresponding to AoI
+        self.reward_VoI = 100.0  # reward weight corresponding to V2V data rate
+        self.reward_G = 5.0  # reward weight corresponding to V2V data rate
+        self.QMS = 2  # queue management strategies (QMS) = 1 OR 2
+
+
+class ParametersPPO(SharedParams, V2Xparams):
     def __init__(self):
         super(ParametersPPO, self).__init__()
+
+
+        self.actor_hidden_dim = (128,128)
+        self.critic_hidden_dim = (128,128)
+        self.lr_actor = 3e-4
+        self.lr_critic = 1e-3
+
+
+
+
+
+
 
         # training loop hyperparameters
         self.buffer_episodes = 10  # num episodes in batch buffer
@@ -29,10 +81,8 @@ class ParametersPPO(SharedParams):
         self.train_iterations = math.ceil(self.total_train_episodes / self.buffer_episodes) #top-lvl loop index
 
         # training value hyperparameters
-        self.actor_hidden_dim = 128
-        self.critic_hidden_dim = 128
-        self.actor_lr = 3e-4
-        self.critic_lr = 1e-3
+
+
         self.gamma = 0.99
         self.gae_lambda = 0.99
         self.entropy_coef = 0.01

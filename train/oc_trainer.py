@@ -5,8 +5,8 @@ from itertools import count
 import numpy as np
 import torch as th
 
-from env.fourrooms import FourRooms, FourRooms_m
-from agent.oc import OC_Network
+from Env.fourrooms import FourRooms, FourRooms_m
+from Agent.oc import OC_Network
 from helpers.oc_helper import ReplayBuffer, pre_process
 
 
@@ -19,8 +19,8 @@ class OCtrainer:
 
         agent = OC_Network(params).to(device)
         agent_prime = deepcopy(agent)
-        # opt = th.optim.RMSprop(agent.parameters(), lr=params.lr)
-        # for name, param in agent.named_parameters():
+        # opt = th.optim.RMSprop(Agent.parameters(), lr=params.lr)
+        # for name, param in Agent.named_parameters():
         #     print(name, param.shape)
         # sys.exit()
         opt = th.optim.Adam([
@@ -153,7 +153,7 @@ class OCtrainer:
 
     @staticmethod
     def test(agent, params, n_ep, goal):
-        """tests agent and averages result, configure whether to show (render)
+        """tests Agent and averages result, configure whether to show (render)
                     testing and how long to delay in ParametersPPO class"""
         render_testing = params.show_testing and n_ep > params.render_delay
         agent.train(mode=False)

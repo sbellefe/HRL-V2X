@@ -19,16 +19,13 @@ class ALGO_Runner():
 
             for trial in range(params.num_trials):
                 print(f"Trial: {trial + 1}")
+
+                #initialize trainer and call train method
                 trainer = self.trainer()
-
-                #ensure trials start with same goal.
-                if "FourRoom" in params.env_name: self.env.choose_goal(params.starting_goal)
-
-                train_rewards, test_rewards, test_episode_lengths = trainer.train(self.env, params)
+                train_rewards, test_rewards, test_episode_lengths = trainer.train(trial, self.env, params)
 
                 all_train_returns.append(train_rewards)
                 all_test_returns.append(test_rewards)
-                all_test_lengths.append(test_episode_lengths)
 
             print(f"Experiment completed in {(time.time() - start):.2f} seconds")
             np.save('all_train_returns.npy', all_train_returns)

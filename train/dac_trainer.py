@@ -5,8 +5,8 @@ import torch as th
 import gymnasium as gym
 from torch.distributions import Categorical
 
-from env.fourrooms import FourRooms, FourRooms_m
-from agent.dac import DAC_Network
+from Env.fourrooms import FourRooms, FourRooms_m
+from Agent.dac import DAC_Network
 from helpers.dac_helper import BatchProcessing, compute_GAE, pre_process, compute_pi_hat
 
 class DACtrainer():
@@ -106,7 +106,7 @@ class DACtrainer():
                         pass
 
                     # logic for episode termination/truncation
-                    if truncated:  # Compute next value if episode env timelimit is reached
+                    if truncated:  # Compute next value if episode Env timelimit is reached
                         with th.no_grad():
                             prediction = network(pre_process(obs))
                         pi_hat = compute_pi_hat(prediction, prev_option)
@@ -234,7 +234,7 @@ class DACtrainer():
 
     @staticmethod
     def test(network, params, n_ep, goal):
-        """tests agent and averages result, configure whether to show (render)
+        """tests Agent and averages result, configure whether to show (render)
             testing and how long to delay in ParametersPPO class"""
         network.train(mode=False)
         render_testing = params.show_testing and n_ep > params.render_delay

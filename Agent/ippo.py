@@ -5,15 +5,15 @@ from torch.nn import functional as F
 from torch.distributions import Categorical
 
 
-class PPO_Actor(nn.Module):
+class IPPO_Actor(nn.Module):
     def __init__(self, state_dim, hidden_dim, action_dim):
-        super(PPO_Actor, self).__init__()
+        super(IPPO_Actor, self).__init__()
         self.state_dim = state_dim
         self.action_dim = action_dim
 
-        self.fc1 = nn.Linear(state_dim, hidden_dim)
-        self.fc2 = nn.Linear(hidden_dim, hidden_dim)
-        self.fc3 = nn.Linear(hidden_dim, action_dim)
+        self.fc1 = nn.Linear(state_dim, hidden_dim[0])
+        self.fc2 = nn.Linear(hidden_dim[0], hidden_dim[1])
+        self.fc3 = nn.Linear(hidden_dim[1], action_dim)
 
         self.initialize_weights()
 
@@ -32,12 +32,38 @@ class PPO_Actor(nn.Module):
         logits = self.fc3(x)
         return logits
 
+    def mapping_action2RRA(self, action):
+
+        if isinstance(action, th.Tensor):
+            action = action.cpu().numpy()
+
+        if self.state_type == 'simplified_version':
+
+            if action < self.out_num - 1:
+                # convert action index to power allocation and SC allocation
+                SC_index = self.ag_idx  # self.n_SC - self.ag_idx - 1
+                Power_level_index = action % self.n_pw_levels
+            else:
+                SC_index = -1
+                Power_level_index = -1
+        else:
+            if action < self.out_num - 1:
+                # convert action index to power allocation and SC allocation
+                # SC_index = int(np.floor(action.cpu().numpy() / self.n_pw_levels))
+                SC_index = int(np.floor(action / self.n_pw_levels))
+                Power_level_index = action % self.n_pw_levels
+            else:
+                SC_index = -1
+                Power_level_index = -1
+
+        return SC_index, Power_level_index
+
     @staticmethod
     def select_action(logits):
         action_dist = Categorical(logits=logits)
         action = action_dist.sample()
         logp = action_dist.log_prob(action)
-        return action, logp, action_dist
+        return action, logp #, action_dist
 
     def actor_loss(self, logp, old_logp, advantages, eps_clip):
         # Calculate ratio (pi_theta / pi_theta_old)
@@ -49,14 +75,14 @@ class PPO_Actor(nn.Module):
         loss = -th.min(surr1, surr2).mean()
         return loss
 
-class PPO_Critic(nn.Module):
+class IPPO_Critic(nn.Module):
     def __init__(self, state_dim, hidden_dim):
-        super(PPO_Critic, self).__init__()
+        super(IPPO_Critic, self).__init__()
         self.state_dim = state_dim
 
-        self.fc1 = nn.Linear(state_dim, hidden_dim)
-        self.fc2 = nn.Linear(hidden_dim, hidden_dim)
-        self.fc3 = nn.Linear(hidden_dim, 1)
+        self.fc1 = nn.Linear(state_dim, hidden_dim[0])
+        self.fc2 = nn.Linear(hidden_dim[0], hidden_dim[1])
+        self.fc3 = nn.Linear(hidden_dim[1], 1)
 
         self.initialize_weights()
 

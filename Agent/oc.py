@@ -127,7 +127,7 @@ class OC_Network(nn.Module):
         """Computes squared TD error between Q and the update target for a
             minibatch of samples,
                 Inputs:
-                    agent: nn.Module type OptionCritic to be trained
+                    Agent: nn.Module type OptionCritic to be trained
                     agent_prime: target model
                     batch: tuple(obs, option, reward, next_obs, done)
                 Returns:

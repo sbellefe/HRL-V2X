@@ -5,31 +5,38 @@ import numpy as np
 import torch as th
 from torch.distributions import Categorical
 
-from env.fourrooms import FourRooms, FourRooms_m
-from agent.ppo import PPO_Actor, PPO_Critic
+from Agent.ippo import IPPO_Actor, IPPO_Critic
 from helpers.ppo_helper import BatchProcessing, compute_GAE, pre_process
 
-class PPOtrainer:
+from Env.UtilityCommunication.veh_position_helper import *
+
+class IPPOtrainer:
     def __init__(self):
         pass
 
-    def train(self, env, params):
+    def train(self, trial, env, params):
         device = params.device
-        actor = PPO_Actor(params.state_dim, params.actor_hidden_dim, params.action_dim).to(device)
-        critic = PPO_Critic(params.state_dim, params.critic_hidden_dim).to(device)
-        actor_opt = th.optim.Adam(actor.parameters(), lr=params.actor_lr)
-        critic_opt = th.optim.Adam(critic.parameters(), lr=params.critic_lr)
+        # actor = PPO_Actor(params.state_dim, params.actor_hidden_dim, params.action_dim).to(device)
+        # critic = PPO_Critic(params.state_dim, params.critic_hidden_dim).to(device)
 
-        episode_rewards = []
-        test_returns = []
-        test_episode_lengths = []
+        actors = [IPPO_Actor(params.state_dim, params.actor_hidden_dim, params.action_dim).to(device) for _ in range(params.num_agents)]
+        critics = [IPPO_Critic(params.state_dim, params.critic_hidden_dim).to(device) for _ in range(params.num_agents)]
 
-        if params.switch_goal: print(f"Current goal {env.goal}")
 
+        opt = th.optim.Adam([
+                    {'params': actor.parameters(), 'lr': params.lr_actor} for actor in actors
+                ] + [
+                    {'params': critic.parameters(), 'lr': params.lr_critic} for critic in critics
+                ])
+
+
+        training_rewards = []
+        testing_rewards = []
         n_ep = 0
 
         for it in range(params.train_iterations):
             buffer = []
+            # episode_rewards = [0 for _ in range(params.num_agents)]
 
             for ep in range(params.buffer_episodes):
                 state_history = []
@@ -37,6 +44,101 @@ class PPOtrainer:
                 logp_history = []
                 reward_history = []
                 value_history = []
+                done_history = []
+
+                # state_history = [[] for _ in range(params.num_agents)]
+                # action_history = [[] for _ in range(params.num_agents)]
+                # logp_history = [[] for _ in range(params.num_agents)]
+                # reward_history = [[] for _ in range(params.num_agents)]
+                # value_history = [[] for _ in range(params.num_agents)]
+
+
+                # for "game modes 1 or 2" ?
+                num_control_interval = 1
+
+                if params.env_name == 'NFIG':
+                    sampled_data = sample_veh_position_from_timestep(env.veh_pos_data, params.env_setup)  # [25.0, 30.0, 35.0, 65.0]
+                elif params.env_name == 'SIG':
+                    sampled_data = sample_veh_positions(num_control_interval, env.veh_pos_data)
+                else:
+                    raise NotImplementedError
+
+                env.loaded_veh_data = sampled_data
+
+                env.new_random_game()
+
+                for interval in range(1, num_control_interval + 1):
+
+                    if interval > 1:
+                        env.renew_positions_by_file(interval)
+                        env.renew_channel()
+                        env.renew_queue()
+
+                    for t in range(params.n_step_per_episode_communication):
+
+                        env.renew_fast_fading()
+
+
+                        RRA_all_agents = np.zeros([params.n_veh - 1, params.n_neighbor, 2], dtype='int32')
+
+                        # Collect actions/logp/values for each agent
+                        for a in range(params.num_agents):
+                            with th.no_grad():
+                                obs = env.get_state([a, 0], 0, t)
+                                state = th.tensor(obs, dtype=th.float32).squeeze().to(device)
+                                action, logp = actors[a](state)
+                                value = critics[a](state)
+
+                            state_history[a].append(state)
+                            action_history[a].append(action)
+                            logp_history[a].append(logp)
+                            value_history[a].append(value)
+
+                            RRA_all_agents[a, 0, 0], RRA_all_agents[a, 0, 1] = actors[a].mapping_action2RRA(action)
+
+                        global_reward, individual_rewards, V2I_throughput = env.reward_step(RRA_all_agents.copy())
+
+                        if params.game_mode == 1:
+                            global_reward = global_reward + sum(V2I_throughput)
+                        else:
+                            global_reward = global_reward
+
+                        for i in range(params.num_agents):
+                            reward_history[i].append(individual_rewards[i])
+                            episode_rewards[i] += individual_rewards[i]
+
+                        if params.game_mode == 1 or params.game_mode == 2:
+                            if t == params.n_step_per_episode_communication - 1:
+                                done = True
+                            else:
+                                done = False
+                        else:
+                                if t == params.n_step_per_episode_communication - 1 and interval == params.t_max:
+                                    done = True
+                                else:
+                                    done = False
+
+                        done_history.append(done)
+
+                        if done:
+                            break
+                n_ep += 1
+
+                # test at interval and print result
+                if n_ep % params.test_interval == 0:
+                    # show_testing = False if n_ep < params.render_delay and params.show_testing else True
+                    test_reward = self.test(deepcopy(actors), params, env.test_data_list, n_ep)
+                    testing_rewards.append(test_reward)
+                    print(f'Test return at episode {n_ep}: {test_reward:.3f}.')
+
+
+
+
+
+
+
+
+
 
                 obs, _ = env.reset()
                 total_reward = 0
@@ -68,7 +170,7 @@ class PPOtrainer:
                         pass
 
                     #logic for episode termination/truncation
-                    if truncated:   #Compute next value if episode env timelimit is reached
+                    if truncated:   #Compute next value if episode Env timelimit is reached
                         next_state = pre_process(obs).to(device)
                         with th.no_grad():
                             next_value = critic(next_state)
@@ -154,7 +256,7 @@ class PPOtrainer:
 
     @staticmethod
     def test(actor, params, n_ep, goal):
-        """tests agent and averages result, configure whether to show (render)
+        """tests Agent and averages result, configure whether to show (render)
             testing and how long to delay in ParametersPPO class"""
         render_testing = params.show_testing and n_ep > params.render_delay
 
