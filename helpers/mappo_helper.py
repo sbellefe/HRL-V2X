@@ -17,9 +17,10 @@ class BatchProcessing:
         for data in buffer:
             state, action, logp, value, rtrn, adv = data
             state = th.stack(state).to(device)
-            action = th.stack(action).to(device)
-            logp = th.stack(logp).to(device)
-            value = th.stack(value).to(device)
+            action = th.tensor(action, dtype=th.float32).to(device)
+            # logp = th.stack(logp).to(device)
+            logp = th.tensor([[lp.item() for lp in lps] for lps in logp], dtype=th.float32).to(device)
+            value = th.tensor(value, dtype=th.float32).to(device)
 
             batch_states.append(state)
             batch_actions.append(action)
@@ -39,10 +40,19 @@ class BatchProcessing:
         # normalize advantages
         batch_advantages = (batch_advantages - batch_advantages.mean()) / batch_advantages.std()
 
+        # print(f"state: {batch_states.shape}\n"
+        #       f"action: {batch_actions.shape}\n"
+        #       f"logp: {batch_logp.shape}\n"
+        #       f"rtrn: {batch_returns.shape}\n"
+        #       f"adv: {batch_advantages.shape}\n"
+        #       f"v: {batch_values.shape}\n")
+
+
         return batch_states, batch_actions, batch_logp, batch_values, batch_returns, batch_advantages
 
 def compute_GAE(rewards, values, gamma, gae_lambda, device):
     advantages, returns = [], []
+    values = values + [0]
     R, gae = 0, 0 #set final next state advantage and return = 0
 
     for t in reversed(range(len(rewards))):
@@ -61,9 +71,11 @@ def compute_GAE(rewards, values, gamma, gae_lambda, device):
 
     #convert lists to tensors
     returns = [th.tensor(agent_returns) for agent_returns in returns]
-    returns = th.stack(returns).to(device)
-    advantages = th.stack(advantages).to(device)
+    # returns = th.stack(returns).to(device)
+    returns = th.tensor(returns, dtype=th.float32).to(device)
+    # advantages = th.stack(advantages).to(device)
+    advantages = th.tensor(advantages, dtype=th.float32).to(device)
 
-    del values[-1]  # remove final next state value from buffer
+    # del values[-1]  # remove final next state value from buffer
 
     return returns, advantages

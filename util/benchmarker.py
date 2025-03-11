@@ -12,7 +12,6 @@ class Utils:
 
     def benchmark_plot(self, all_train_returns,
                        all_test_returns,
-                       all_test_lengths,
                        test_interval,
                        store_avg_test=True):
         """Data processing and calculations"""
@@ -22,18 +21,15 @@ class Utils:
         # Convert lists to numpy arrays for easier calculations
         all_train_returns = np.array(all_train_returns)
         all_test_returns = np.array(all_test_returns)
-        all_test_lengths = np.array(all_test_lengths)
         # print(all_test_returns.shape)
 
         """Overall benchmarking"""
         # Calculate the mean and 95% confidence intervals
         mean_train_returns = all_train_returns.mean(axis=0)
         mean_test_returns = all_test_returns.mean(axis=0)
-        mean_test_lengths = all_test_lengths.mean(axis=0)
 
         train_ci = 1.96 * all_train_returns.std(axis=0) / np.sqrt(num_trials)
         test_ci = 1.96 * all_test_returns.std(axis=0) / np.sqrt(num_trials)
-        test_len_ci = 1.96 * all_test_lengths.std(axis=0) / np.sqrt(num_trials)
 
         # Calculate individual maximum returns from each trial
         individual_max_returns = [np.max(trial_returns) for trial_returns in all_test_returns]
@@ -47,43 +43,6 @@ class Utils:
         t_value = st.t.ppf(1 - 0.025, df=n - 1)
         margin_of_error = t_value * sample_std / np.sqrt(n)
         avg_max_return_ci = margin_of_error
-
-        """Transfer learning benchmarking"""
-        #split arrays in half (before and after goal switch)
-        halfway_point = num_points // 2
-        test_returns_g1 = all_test_returns[:,:halfway_point]
-        test_returns_g2 = all_test_returns[:,halfway_point:]
-
-        #compute max return for each half
-        max_returns_g1 = [np.max(trial_returns) for trial_returns in test_returns_g1]
-        max_returns_g2 = [np.max(trial_returns) for trial_returns in test_returns_g2]
-
-        #compute average max return
-        avg_max_return_g1 = np.mean(max_returns_g1)
-        avg_max_return_g2 = np.mean(max_returns_g2)
-        avg_max_return_g1g2 = [avg_max_return_g1, avg_max_return_g2]
-
-        # Calculate the 95% confidence interval
-        n = len(max_returns_g1)
-        sample_std_g1 = np.std(max_returns_g1, ddof=1)
-        sample_std_g2 = np.std(max_returns_g2, ddof=1)
-        t_value = st.t.ppf(1 - 0.025, df=n - 1)
-        avg_max_return_ci_g1 = t_value * sample_std_g1 / np.sqrt(n)
-        avg_max_return_ci_g2 = t_value * sample_std_g2 / np.sqrt(n)
-        avg_max_return_ci_g1g2 = [avg_max_return_ci_g1, avg_max_return_ci_g2]
-
-        """Plot test episode lengths"""
-        plt.figure(figsize=(12, 6))
-        episodes = np.arange(0, num_points * test_interval, test_interval)
-        for i in range(num_trials):
-            plt.plot(episodes, all_test_lengths[i], linestyle='dotted', alpha=0.5, label=f'Trial {i+1}')  # Individual test trials
-        plt.plot(episodes, mean_test_lengths, '-o', label='Mean Episode Lengths', color='black')  # Mean test returns without error bars
-        plt.fill_between(episodes, mean_test_lengths - test_len_ci, mean_test_lengths + test_len_ci, color='lightblue', alpha=0.3, label='CI')  # Fill between upper and lower bounds
-        plt.xlabel('Training Episodes')
-        plt.ylabel('Average Test Episode Length')
-        plt.title('Test Episode Lengths with 95% Confidence Interval')
-        plt.legend()
-        plt.show()
 
 
         """Plot test returns"""
@@ -133,13 +92,10 @@ class Utils:
 
         if store_avg_test:
             returns_and_ci = [mean_test_returns, test_ci]
-            lengths_and_ci = [mean_test_lengths, test_len_ci]
             np.save('returns_and_ci.npy', returns_and_ci)
-            np.save('lengths_and_ci.npy', lengths_and_ci)
 
 
-        return (mean_test_returns, avg_max_return, avg_max_return_ci, individual_max_returns,
-                avg_max_return_g1g2, avg_max_return_ci_g1g2)
+        return mean_test_returns, avg_max_return, avg_max_return_ci, individual_max_returns
 
     def multi_benchmark(self):
         """Run benchmarking of multiple algorithms by running this script.

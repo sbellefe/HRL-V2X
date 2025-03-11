@@ -9,7 +9,7 @@ from Env.UtilityCommunication.veh_position_helper import *
 
 # Import runner, trainers, and parameters classes here
 from runner.runner import ALGO_Runner
-from train.ippo_trainer import IPPOtrainer
+from train.mappo_trainer import MAPPOtrainer
 # from train.oc_trainer import OCtrainer
 # from train.dac_trainer import DACtrainer
 from util.parameters import ParametersPPO, ParametersOC, ParametersDAC
@@ -62,9 +62,9 @@ def main():
 
 
     #assign params and trainer classes based on algo input
-    if args.algo == 'ippo':
+    if args.algo == 'ppo':
         params = ParametersPPO()
-        trainer = lambda: IPPOtrainer()
+        trainer = lambda: MAPPOtrainer()
     elif args.algo == 'oc':
         params = ParametersOC()
         trainer = lambda: OCtrainer()

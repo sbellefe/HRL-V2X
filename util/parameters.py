@@ -3,18 +3,24 @@ import torch as th
 from torch.nn import functional as F
 from Env.env_params import V2Xparams #TODO: migrate relevant parts here
 
-class SharedParams:
+class SharedParams(V2Xparams):
     def __init__(self):
+        super(SharedParams, self).__init__()
         self.device = th.device('cuda' if th.cuda.is_available() else 'cpu')
-        self.total_train_episodes = 100000  # number of control episodes
+
+        self.num_trials = 5
+        self.total_train_episodes = 20000#100000  # number of control episodes
         self.t_max = 10             # maximum number of time for control
         self.num_agents = 1
 
+        # self.num_veh = self.num_agents * 2
 
-        self.num_trials = 5
+
+
+
 
         self.t_max_control = 120
-        self.test_interval = 10  # test every 10 episodes
+        self.test_interval = 1000  # test every 10 episodes
         self.test_episodes = 10  # test 10 episodes and get average results
 
 class ParametersV2X_N:
@@ -58,34 +64,27 @@ class ParametersV2X_N:
         self.QMS = 2  # queue management strategies (QMS) = 1 OR 2
 
 
-class ParametersPPO(SharedParams, V2Xparams):
+class ParametersPPO(SharedParams):
     def __init__(self):
         super(ParametersPPO, self).__init__()
 
-
-        self.actor_hidden_dim = (128,128)
-        self.critic_hidden_dim = (128,128)
-        self.lr_actor = 3e-4
-        self.lr_critic = 1e-3
-
-
-
-
-
-
-
         # training loop hyperparameters
-        self.buffer_episodes = 10  # num episodes in batch buffer
+        self.buffer_episodes = 32  # or "batch_size" num episodes in batch buffer
         self.opt_epochs = 10    #num optimization epochs per batch buffer
-        self.mini_batch_size = 64
+        # self.mini_batch_size = 320
+        self.num_mini_batches = 1
         self.train_iterations = math.ceil(self.total_train_episodes / self.buffer_episodes) #top-lvl loop index
 
+        # network hyperparameters
+        self.actor_hidden_dim = (128, 128)
+        self.critic_hidden_dim = (128, 128)
+        self.lr_actor = 5e-4 #3e-4
+        self.lr_critic = 5e-4#1e-3
+
         # training value hyperparameters
-
-
-        self.gamma = 0.99
+        self.gamma = 0.95
         self.gae_lambda = 0.99
-        self.entropy_coef = 0.01
+        self.entropy_coef = 0.001
         self.eps_clip = 0.2
 
 class ParametersDAC(SharedParams):
