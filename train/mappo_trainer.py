@@ -10,11 +10,11 @@ from torch.nn import functional as F
 from Agent.mappo import MAPPO_Actor, MAPPO_Critic
 from helpers.mappo_helper import BatchProcessing, compute_GAE, pre_process
 
-from Env.UtilityCommunication.veh_position_helper import *
-from Env.env_helper import EnvironHelper
+from Envs.UtilityCommunication.veh_position_helper import *
+from Envs.env_helper import EnvironHelper
 
-from Env.env_params import V2Xparams
-from Env.Environment import Environ
+from Envs.env_params import V2Xparams
+from Envs.Environment import Environ
 
 
 class MAPPOtrainer:
