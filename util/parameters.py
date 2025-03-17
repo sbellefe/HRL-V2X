@@ -1,17 +1,27 @@
 import math
 import torch as th
 from torch.nn import functional as F
-from Env.env_params import V2Xparams #TODO: migrate relevant parts here
+from Envs.env_params import V2Xparams #TODO: migrate relevant parts here
 
 class SharedParams(V2Xparams):
     def __init__(self):
         super(SharedParams, self).__init__()
         self.device = th.device('cuda' if th.cuda.is_available() else 'cpu')
 
+        """global hyperparams"""
         self.num_trials = 5
-        self.total_train_episodes = 20000#100000  # number of control episodes
+        self.total_train_episodes = 20000 #100000  # number of control episodes
         self.t_max = 10             # maximum number of time for control
         self.num_agents = 1
+
+        """global environment parameters"""
+        self.multi_location = True
+        self.fast_fading = True
+        self.single_loc_idx = 25.0    #only used for NFIG, SIG_SL
+        self.multi_loc_idx = [35, 45]
+        #TODO: Make game_mode automatically calculated ??
+        self.game_mode = 2 # 1:Chanel only, 2:++Queue, 3:++AoI, 4:POSIG
+
 
         # self.num_veh = self.num_agents * 2
 
@@ -64,9 +74,9 @@ class ParametersV2X_N:
         self.QMS = 2  # queue management strategies (QMS) = 1 OR 2
 
 
-class ParametersPPO(SharedParams):
+class ParametersMAPPO(SharedParams):
     def __init__(self):
-        super(ParametersPPO, self).__init__()
+        super(ParametersMAPPO, self).__init__()
 
         # training loop hyperparameters
         self.buffer_episodes = 32  # or "batch_size" num episodes in batch buffer

@@ -5,7 +5,7 @@ import gymnasium as gym
 
 from Envs.env_params import V2Xparams
 from env.v2x_env import V2XEnvironment
-from env.env_params import *
+from env.env_helper import *
 
 # from Envs.Environment import Environ
 # from Envs.UtilityCommunication.veh_position_helper import *
@@ -67,22 +67,8 @@ def main():
         raise ValueError("Environment name incorrect or found")
 
     #Load environment
-    env = V2XEnvironment(veh_pos_data,test_data_list)
+    env = V2XEnvironment(params,veh_pos_data,test_data_list)
 
-
-    #Add loaded vehicle position data to env class
-    env_params.loaded_veh_data = sampled_data
-    env.veh_pos_data = veh_pos_data
-    env.loaded_veh_data = sampled_data
-    env.test_data_list = test_data_list
-
-
-
-
-    #add environment specific parameters
-    params.env_name = env_name
-    params.state_dim = env.stateDim
-    params.action_dim = env.actionDim
 
 
     #define runner and run experiment
