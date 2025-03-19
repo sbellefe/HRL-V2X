@@ -1,21 +1,57 @@
 # Hierarchical RL
 
-Implementation and benchmarking of multi-agent HRL algorithms in V2X environments. Compares OC and DAC to IPPO.
+Implementation and benchmarking of multi-agent HRL algorithms in V2X environments. Compares OC and DAC to MAPPO.
 
 ## requirements: 
 ```pip install -r requirements.txt```
 
+## main.py:
+
+Use this command in terminal to run code:
+
+```python main.py --env MY_ENV_HERE --algo MY_ALGO_HERE```\
+e.g ```python main.py --env SIG --algo ippo```
+
+## env: V2X Environment 
+Choose from the following options in the command line:
+- ```NFIG```: single timestep game with channel awareness
+- ```SIG```: multi timestep game with channel and queue awareness
+- ```POSIG```: same as ```SIG``` but with partial observability (i.e. no access to global state)
+
+Additional game mode configurations (set by changing attributes of util/parameters/```SharedParams``` class):
+- multi-location (mloc) vs. single location (sloc): ```self.multi_location``` (bool)
+- fast-fading (ff) vs. no fast-fading (nff): ```self.fast_fading``` (bool)
+- positional data time index to use for sloc: ```self.single_loc_idx``` (e.g. 25.0)
+- positional data time indices to use for mloc: ```self.multi_loc_idx``` (e.g. \[35, 45])
+
+env/SUMOData: Contains positional vehicle data in .csv files obtained from simulation.
+
+env/v2x_env.py: Contains ```Vehicle``` and ```V2XEnvironment``` classes for managing vehicle positions and calculating pathlosses & rewards.
+- Adjust local environment variables/configurations in ```V2XEnvironment.__init__```
+
+## util:
+
+benchmarker.py: Compute evaluation metrics, plot training and testing results.
+- Each run is benchmarked after completion
+- Additional method to benchmark multiple runs
+
+parameters.py: 
+- Shared hyperparameter class ```SharedParams``` used for additional environment configuration and high-level train/test loop structure.
+- Hyperparameter classes for each algorithm inherit from ```SharedParams```. Used for algorithm specific hyperparameters.
+
+
+
 ## agent: 
-ippo.py: Contains ```IPPOActor``` and ```IPPOCritic``` classes.
+mappo.py: Contains ```MAPPOActor``` and ```MAPPOCritic``` classes.
 
-oc.py: Contains ```OC_SingleOptionNet``` and ```OC_Networks``` classes.
+oc.py: Contains ```OC_SingleOptionNet``` and ```OC_Networks``` classes. UPDATE
 
-dac.py: Contains ```DAC_SingleOptionNet``` and ```DAC_Network``` classes.
+dac.py: Contains ```DAC_SingleOptionNet``` and ```DAC_Network``` classes. UPDATE
 
 ## runner:
 runner.py: Contains ```ALGO_Runner``` class and the method ```run_experiment``` used for all algorithms.
 
-## trainer:
+## trainer: UPDATE
 ippo_trainer.py: Contains ```IPPOtrainer``` class with methods ```train```, ```test```.
 
 oc_trainer.py: Contains ```OCtrainer``` class with methods ```train```, ```test```.
@@ -28,33 +64,6 @@ dac_trainer.py: Contains ```DACtrainer``` class with methods ```train```, ```lea
 
 Contains additional classes and functions for training algorithms (e.g. replay buffer, pre-processing...).
 
-## V2X Env:
-Choose from:
-- ```NFIG```: single timestep game
-- ```SIG```: multi timestep game with channel and queue awareness
-- ```POSIG```: same as ```SIG``` but with partial observability (i.e. no access to global state)
 
-Env/SUMOData: Contains raw data in .csv files obtained from simulation.
 
-Environment.py: Contains ```Vehichle``` and ```Environ``` classes for managing vehicle positions and calculating fast fading & rewards.
-
-env_params.py: Contains ```V2Xparams``` class with environment configuration parameters.
-
-env_helper.py and /UtilityCommunication/veh_position_helper.py: Contains various helper code.
-
-## util:
-
-benchmarker.py: Compute evaluation metrics, plot training and testing results.
-- Each run is benchmarked after completion
-- Additional method to benchmark multiple runs
-
-parameters.py: 
-- Hyperparameter classes for each algorithm
-- Merged with ```V2Xparams``` class
-
-## main.py:
-
-Use this command in terminal to run code:
-
-```python main.py --env MY_ENV_HERE --algo MY_ALGO_HERE```\
-e.g ```python main.py --env SIG --algo ippo``` 
+ 

@@ -1,57 +1,81 @@
 import math, random, sys
 import numpy as np
-import gymnasium as gym
 
-
+from env.env_helper import sample_veh_positions, remove_test_data_from_veh_pos
 
 
 
 
 class Vehicle:
     """Vehicle class to encode positional data for V2V and V2I cars """
-    def __init__(self, start_position, velocity):
+    def __init__(self, veh_id, start_position, velocity):
+        self.id = veh_id
         self.position = start_position
         self.velocity = velocity
         self.destinations = []
+        self.neighbors = []
 
 
-class V2XEnvironment(gym.Env):
+class V2XEnvironment:
 
-    def __init__(self, params, veh_pos_data, test_data_list):
+    def __init__(self, env_setup, veh_pos_data):
         """configuration hyperparameters"""
-        self.game_mode = params.game_mode
-        self.fast_fading = params.fast_fading
-        self.num_agents = params.num_agents
-        self.t_max_control = params.t_max_control
+        self.game_mode = env_setup['game_mode']
+        self.fast_fading = env_setup['fast_fading']
+        self.num_agents = env_setup['num_agents']
+        self.t_max_control = env_setup['t_max_control']
+        self.k_max = env_setup['k_max']
+        self.multi_location = env_setup['multi_location']
+        self.single_loc_idx = env_setup['single_loc_idx']
+        self.multi_loc_test_idx = env_setup['multi_loc_test_idx']
+
+        """extract/format train/test data samples """
+        if not self.multi_location:
+            self.test_data_list = [sample_veh_positions(veh_pos_data, self.single_loc_idx)]
+            self.veh_pos_data = sample_veh_positions(veh_pos_data, self.single_loc_idx)
+        else:
+            self.test_data_list = [sample_veh_positions(veh_pos_data, step) for step in self.multi_loc_test_idx]
+            self.veh_pos_data = remove_test_data_from_veh_pos(veh_pos_data, self.multi_loc_test_idx)
 
         """local env parameters"""
-        self.reward_G = 5.0  # reward weight corresponding to V2V data rate
-        self.NQ = 1  # number of buffer size at each agent
-        self.sig2 = 10 ** (-114 / 10)   # -114dB power level of AWGN noise
-        self.num_SC = 4       # number of sub-channels and V2I links
-        self.V2V_power_dB_list = [23, 15, 5]  # power levels at the PM vehicle side
-        self.h_bs = 1.5     #height of base station antenna [meters]
-        self.h_ms = 1.5     #height of mobile station (vehicle) antenna [meters]
-        self.fc = 2         #carrier frequency [GHz]
-        self.eNB_xy = [500, -43] #position of base station
         self.n_neighbor = 1  # number of neighboring vehicles need to receive CAM
+        #Radio transmission related
+        self.fc = 2                     # carrier frequency [GHz]
+        self.num_SC = 4                 # number of sub-channels and V2I links
+        self.V2V_power_dB_list = [23, 15, 5]  # power levels at the PM vehicle side
+        self.V2I_power_dB = 23          # dBm
+        self.sig2 = 10 ** (-114 / 10)   #-114dB power level of AWGN noise
+        self.h_bs = 1.5                 # height of base station antenna [m]
+        self.h_ms = 1.5                 # height of mobile station (vehicle) antenna [m]
+        self.eNB_xy = [500, -43]        # position of base station
+        self.veh_ant_gain = 3           # Vehicle antenna gain
+        self.veh_noise_figure = 9       # Vehicle noise figure
+        self.bs_ant_gain = 8            # Base station antenna gain
+        self.bs_noise_figure = 5        # Base station noise figure
         self.norm_V2V_channel_factor = 120  # Normalization factor for V2V channel
-        self.veh_ant_gain = 3  # Vehicle antenna gain
-        self.veh_noise_figure = 9  # Vehicle noise figure
-        self.bs_ant_gain = 8  # Base station antenna gain
-        self.bs_noise_figure = 5  # Base station noise figure
-        self.V2I_power_dB = 23  # dBm
+
+        #Reward weights
+        self.lambda1 = 0.001  # reward weight corresponding to TODO V2I ??? used for V2V???
+        self.lambda2 = 0.1  # reward weight corresponding to V2V TODO used * V2V_SE
+        self.lambda3 = 1  # reward weight corresponding to AoI
+        self.reward_G = 5.0  # reward weight corresponding to V2V data rate
+
+        # Queue related
+        self.NQ = 1  # number of buffer size at each agent
         self.time_fast = 0.001  #queue parameter
         self.bandwidth_per_SC = int(1000000)  # bandwidth of each sub-channel in Hz
         self.CAM_size = 25600  # number of bits per cooperative awareness message (''CAM), in bits'
-        self.lambda1 = 0.001    # reward weight corresponding to TODO V2I ??? used for V2V???
-        self.lambda2 = 0.1  # reward weight corresponding to V2V TODO used * V2V_SE
-        self.lambda3 = 1        # reward weight corresponding to AoI
 
 
-        """working parameters""" #TODO: Do we need all of these saved as attributes?? could just be local...
+        """working parameters"""
         self.vehicles_V2V = []
         self.vehicles_V2I = []
+        self.current_veh_positions = None   #single positional timestep
+        self.episode_veh_positions = None   #single or multi positional timestep
+        self.active_links = None
+        self.queue = None
+        self.AoI = None
+        #below are kept for debugging
         self.individual_rewards = None
         self.pathloss_V2I_V2V = None
         self.pathloss_V2I_eNB = None
@@ -59,22 +83,19 @@ class V2XEnvironment(gym.Env):
         self.pathloss_V2V_V2V = None
         self.SC_RSRP_dB = None      #Received Signal Recieved Power
         self.interference_V2V_tot = None
-        # self.interference_V2V_tot_dB = None
         self.interference_V2V_Rx = None
         self.interference_V2V_other = None
-        self.interference_V2V_other = None
+        self.interference_V2I_Rx = None
+        self.signal_V2V = None
         self.V2V_SE = None      #Spectral efficiency
-        self.queue = None
-        self.AoI = None
+
 
         """calculated parameters"""
-        self.platoon_V2V = [2 for _ in range(params.num_agents)]
+        self.platoon_V2V = [2 for _ in range(self.num_agents)]
         self.num_veh_V2V = sum(self.platoon_V2V)
         self.num_veh_V2I = self.num_SC
         self.num_power_levels = len(self.V2V_power_dB_list)
         self.action_dim = self.num_power_levels * self.num_SC + 1
-        if self.game_mode == 1: self.t_max_control = 1 #adjust for NFIG
-
 
         #---Define null_ID: set of V2V cars that are not agents (receiver)---
         self.null_ID = set()
@@ -84,7 +105,6 @@ class V2XEnvironment(gym.Env):
             for v in range(n_veh):
                 if v == 0:  # Add the first vehicle
                     self.null_ID.add(v + non_ag_offset)
-
             non_ag_offset += n_veh
 
         #---Agent --> Vehicle ID mapping---
@@ -94,8 +114,7 @@ class V2XEnvironment(gym.Env):
             if veh_idx not in self.null_ID:
                 self.agent2veh[agent_index] = veh_idx
                 agent_index += 1
-            else:
-                continue
+            else: continue
 
         #---compute state dimension---
         dim_t = self.t_max_control
@@ -117,50 +136,130 @@ class V2XEnvironment(gym.Env):
 
         #                   t: one hot code comm interval      G_i          G_ji            G_m             G_Bi     G_iB  queue
 
+        """Initialize vehicles once by creating vehicle objects and computing neighbors/destinations."""
+        random_pos_sample = sample_veh_positions(self.veh_pos_data, time_step=10) #timestep is arbitrary
+        self.initialize_vehicles(random_pos_sample)
 
+    def initialize_vehicles(self, sampled_veh_pos_data):
+        """Initialize vehicles given position data sample. Called in
+            __init__ to create all vehicle objects w/ static params."""
 
+        # Clear any existing vehicles (if re-initializing)
+        self.vehicles_V2V = []
+        self.vehicles_V2I = []
 
-
-    def add_vehicles(self, veh_pos_data):
-        """Load position/speed of each vehicle from dataframe"""
-
-        #
-        def add_vehicle(position, velocity, type):
+        def add_vehicle(veh_id, position, velocity, type):
             """vehicle adder function"""
             if type == "V2V":
-                self.vehicles_V2V.append(Vehicle(position, velocity))
+                self.vehicles_V2V.append(Vehicle(veh_id, position, velocity))
             elif type == "V2I":
-                self.vehicles_V2I.append(Vehicle(position, velocity))
+                self.vehicles_V2I.append(Vehicle(veh_id, position, velocity))
 
-        #loop through rows, store vehicle info
-        for _, row in veh_pos_data.iterrows():
+        # Create vehicles from DataFrame
+        for _, row in sampled_veh_pos_data.iterrows():
             veh_id = row['id']
             position = [row['x'], row['y']]
             velocity = row['speed']
-
             if veh_id.startswith("carflowV2I"):
-                add_vehicle(position, velocity, "V2I")
+                add_vehicle(veh_id, position, velocity, "V2I")
             elif veh_id.startswith("carflow"):
-                add_vehicle(position, velocity, "V2V")
+                add_vehicle(veh_id, position, velocity, "V2V")
+
+        # Compute neighbors and destinations for V2V vehicles TODO Check!!
+        for i in range(self.num_agents):
+            veh_index = self.agent2veh[i]
+            v2v_vehicle = self.vehicles_V2V[veh_index]
+            # For example: assign the previous vehicle as the neighbor (static assignment)
+            v2v_vehicle.neighbors = [veh_index - 1] * self.n_neighbor
+            v2v_vehicle.destinations = v2v_vehicle.neighbors.copy()
+
+            veh = self.agent2veh[i]
+            v2v_vehicle = self.vehicles_V2V[veh]
+            v2v_vehicle.neighbors = [veh - 1] * self.n_neighbor  # Assuming `veh - 1` is valid
+            v2v_vehicle.destinations = v2v_vehicle.neighbors  # Reusing the list
+
+    def update_vehicle_positions(self, sampled_veh_pos_data):
+        """Update positions for already initialized vehicles using new positional data."""
+        v2v_idx, v2i_idx = 0, 0 #TODO Optimize?
+        for _, row in sampled_veh_pos_data.iterrows():
+            veh_id = row['id']
+            new_position = [row['x'], row['y']]
+            new_velocity = row['speed']
+            if veh_id.startswith("carflowV2I"):
+                self.vehicles_V2I[v2i_idx].position = new_position
+                self.vehicles_V2I[v2i_idx].velocity = new_velocity
+                v2i_idx += 1
+            elif veh_id.startswith("carflow"):
+                self.vehicles_V2V[v2v_idx].position = new_position
+                self.vehicles_V2V[v2v_idx].velocity = new_velocity
+                v2v_idx += 1
 
 
-
-
-
+    # def add_vehicles(self, sampled_veh_pos_data):
+    #     """Load vehicles and compute neighbors and destinations."""
+    #
+    #     def add_vehicle(position, velocity, type):
+    #         """vehicle adder function"""
+    #         if type == "V2V":
+    #             self.vehicles_V2V.append(Vehicle( position, velocity))
+    #         elif type == "V2I":
+    #             self.vehicles_V2I.append(Vehicle(position, velocity))
+    #     # loop through rows, store vehicle info
+    #     for _, row in sampled_veh_pos_data.iterrows():
+    #         veh_id = row['id']
+    #         position = [row['x'], row['y']]
+    #         velocity = row['speed']
+    #
+    #         if veh_id.startswith("carflowV2I"):
+    #             add_vehicle(position, velocity, "V2I")
+    #         elif veh_id.startswith("carflow"):
+    #             add_vehicle(position, velocity, "V2V")
+    #
+    #     # Assign destinations and neighbors for V2V vehicle communication (previously renew_neighbors)
+    #     for i in range(self.num_agents):
+    #         # get indices and generate lists
+    #         veh = self.agent2veh[i]
+    #         v2v_vehicle = self.vehicles_V2V[veh]
+    #         v2v_vehicle.neighbors = [veh - 1] * self.n_neighbor  # Assuming `veh - 1` is valid
+    #         v2v_vehicle.destinations = v2v_vehicle.neighbors  # Reusing the list
 
 
     def reset(self):
-        """Create new game (episode). Previous name was 'new_random_game' """
-        self.vehicles_V2V = []
+        """Create a new random game by reloading vehicle positions, reinitializing channels,
+            queues, active links, and AoI values.
+            Re-sample vehicle data based on the game mode:
+                - For game_mode 1 or 2: a single control interval is used (one positional data sample).
+                - For other modes (e.g. POSIG), use t_max_control to sample multiple intervals.
+            Previous name was 'new_random_game' """
 
-        #TODO: Review how we update loaded_veh_data, Should maybe move this functionality from the trainer to the environment file?
-        self.add_vehicles(self.loaded_veh_data)
+        # Sample new vehicle positions
+        if not self.multi_location:    #TODO same time index for test and train???
+            sampled_data = self.veh_pos_data    #same positional data sample always
+        else:   #random data sample
+            sampled_data = sample_veh_positions(self.veh_pos_data, k_max=self.k_max)
+
+        #store episode positional data samples
+        self.episode_veh_positions = sampled_data
+        if self.k_max > 1: #Case for multiple positional samples (POSIG, SIG+AoI)
+            first_timestep = sampled_data['time'].unique()[0] # Get the first unique time index
+            # Slice the DataFrame to include only rows with the first unique time index
+            self.current_veh_positions = sampled_data[sampled_data['time'] == first_timestep]
+        else:
+            self.current_veh_positions = sampled_data
+
+
+        #update vehicle positions and channels
+        self.update_vehicle_positions(self.current_veh_positions)
         self.renew_channel()
 
-        #TODO: Are these all used???
-        self.queue = np.ones((self.num_agents, self.n_neighbor))
-        self.active_links = np.ones((self.num_agents, self.n_neighbor), dtype='bool')
-        self.AoI = np.ones((self.num_agents, self.n_neighbor))
+        # Reset environment parameters
+        self.active_links = np.ones((self.num_agents, self.n_neighbor), dtype='bool')  # TODO:??
+        if self.game_mode in [2,3,4]:
+            self.queue = np.ones((self.num_agents, self.n_neighbor))
+        if self.game_mode in [3,4]:
+            self.AoI = np.ones((self.num_agents, self.n_neighbor))
+
+
 
     def step(self, actions, t, interval):
         """Executes one step in the environment.
@@ -179,7 +278,7 @@ class V2XEnvironment(gym.Env):
 
         # --- Update Environment State ---
         self.compute_SC_received_power(actions)
-        self.renew_active_links()   #TODO
+        self.active_links[:, 0] = queue[:, 0] > 0
 
         # --- Check Episode Completion ---
         done = t == self.t_max_control - 1
@@ -195,13 +294,42 @@ class V2XEnvironment(gym.Env):
 
         elif self.game_mode in [3, 4]: # Reward: V2V SE weighted by lambda2 - AoI weighted by lambda3
             individual_rewards = -self.AoI * self.lambda3 + V2V_SE * self.lambda2
-
             global_reward = np.array([[np.sum(individual_rewards)]])
+
+            # TODO: Confused to what the code is doing here for the "done" part? since 'interval' never iterates
+            done = done and (interval == self.k_max)
 
         else:
             raise ValueError('Invalid gamemode')
 
         return global_reward, individual_rewards, V2I_SE, done
+
+    def step_control(self, interval):
+        """Used only for gamemodes 3,4 with multiple control intervals. At the
+            start of non-initial control intervals: update positions,channels,queues, AoI,active links
+            previous name 'renew_positions' """
+        # Update current positions based on the episode data at the given interval
+        episode_data = self.episode_veh_positions
+        new_timestep = episode_data['time'].unique()[interval - 1]  #get unique time index
+        self.current_veh_positions = episode_data[episode_data['time'] == new_timestep]
+        self.update_vehicle_positions(self.current_veh_positions)
+        self.renew_channel()
+
+        # Reset and update queues and AoI as per control episode requirements.
+        if self.game_mode in [2, 3, 4]:
+            self.queue = np.ones((self.num_agents, self.n_neighbor))
+        if self.game_mode in [3, 4]:
+            self.AoI = np.ones((self.num_agents, self.n_neighbor))
+
+        # Integrated renew_queue functionality:
+        self.AoI[self.queue > 0] += 1
+        self.AoI[self.queue <= 0] = 1
+        self.queue = np.ones((self.num_agents, self.n_neighbor))
+        self.queue[:, 0] = np.minimum(self.queue[:, 0], self.NQ)
+
+        # Integrated renew_active_links functionality:
+        self.active_links[:, 0] = self.queue[:, 0] > 0
+
 
 
     def get_state(self, idx, i_step):
@@ -287,6 +415,63 @@ class V2XEnvironment(gym.Env):
         state = state.reshape((1, self.state_dim))
 
         return state
+
+    def renew_channel(self):
+        """Renew channels by recalculating all path loss values.
+            calls methods compute_V2V_pathloss and compute_V2I_pathloss"""
+        # ---- V2I → V2V interference channel ---- Create a matrix of shape (num_veh_V2I, num_veh_V2V)
+        self.pathloss_V2I_V2V = np.array([
+            [self.compute_V2V_pathloss(v2v.position, v2i.position)
+             for v2v in self.vehicles_V2V]
+            for v2i in self.vehicles_V2I ])
+
+        # ---- V2I → eNB Channel ---- Create a matrix of shape (num_veh_V2I)
+        self.pathloss_V2I_eNB = np.array([
+            self.compute_V2I_pathloss(v2i.position) for v2i in self.vehicles_V2I ])
+
+        # ---- V2V → eNB Channel ---- Create a matrix of shape (num_veh_V2V)
+        self.pathloss_V2V_eNB = np.array([
+            self.compute_V2I_pathloss(v2v.position) for v2v in self.vehicles_V2V ])
+
+        # ---- V2V → V2V Channel ---- Create a matrix of shape (num_veh_V2V, num_veh_V2V)
+        n = self.num_veh_V2V
+        self.pathloss_V2V_V2V = np.array((n,n))
+        print(self.pathloss_V2V_V2V)
+        sys.exit()
+        for i in range(n):
+            for j in range(i+1, n):
+                pl = self.compute_V2V_pathloss(self.vehicles_V2V[i].position, self.vehicles_V2V[j].position)
+                self.pathloss_V2V_V2V[i, j] = pl
+                self.pathloss_V2V_V2V[j, i] = pl
+
+    def mapping_action2RRA(self, action, use_simplified=None):
+        """maps joint action indices to radio resource allocation (RRA)
+            Converts action into:
+                - Subchannel index
+                - Power level index
+            Returns:
+                - SC_index (int): SC index (-1 if idle).
+                - Power_level_index (int): The power level index (-1 if idle).
+            """
+
+
+        if use_simplified is None:  # Standard version
+            if action < self.action_dim - 1:
+                SC_idx = action // self.num_power_levels  # Floor division for SC index
+                power_lvl_idx = action % self.num_power_levels
+            else:
+                SC_idx = -1
+                power_lvl_idx = -1
+        else:   #simplified version
+            if action < self.action_dim - 1:
+                SC_idx = self.ag_idx  # TODO Ensure `self.ag_idx` is correctly initialized
+                power_lvl_idx = action % self.num_power_levels
+            else:
+                SC_idx = -1
+                power_lvl_idx = -1
+
+        return SC_idx, power_lvl_idx
+
 
     def compute_SC_received_power(self, actions):
         """Computes the received power (including noise and interference) at each subchannel for every agent.
@@ -419,14 +604,18 @@ class V2XEnvironment(gym.Env):
                         interference_V2V_other[x, i] = intf_V2V_Rx
 
 
-        # Total interference for V2V links: add noise floor and store values.
+        # Total interference for V2V links: add noise floor
         interference_V2V_tot += self.sig2
+
+        #compute spectral efficiency
+        V2V_SE = np.log2(1 + np.divide(signal_V2V, interference_V2V_tot))
+
+        #store values for debugging
         self.interference_V2V_tot = interference_V2V_tot
-        # self.interference_V2V_tot_dB = 10 * np.log10(interference_V2V_tot)
         self.interference_V2V_Rx = interference_V2V_Rx
         self.interference_V2V_other = interference_V2V_other
-
-        V2V_SE = np.log2(1 + np.divide(signal_V2V, interference_V2V_tot))
+        self.interference_V2I_Rx = interference_V2I_Rx
+        self.signal_V2V = signal_V2V
         self.V2V_SE = V2I_SE    #Spectral efficiency
 
         """ Queue Update """
@@ -471,41 +660,9 @@ class V2XEnvironment(gym.Env):
         # Return spectral efficiencies, updated queue, and computed rewards
         return V2V_SE, V2I_SE, self.queue, reward_V2V
 
-
-
-    def renew_fastfading(self):
-        pass
-
-    def renew_channel(self):
-        """Renew channels by recalculating all path loss values"""
-
-        # ---- V2I → V2V interference channel ---- Create a matrix of shape (num_veh_V2I, num_veh_V2V)
-        self.pathloss_V2I_V2V = np.array([
-            [self.compute_V2V_pathloss(v2v.position, v2i.position)
-             for v2v in self.vehicles_V2V]
-            for v2i in self.vehicles_V2I ])
-
-        # ---- V2I → eNB Channel ---- Create a matrix of shape (num_veh_V2I)
-        self.pathloss_V2I_eNB = np.array([
-            self.compute_V2I_pathloss(v2i.position) for v2i in self.vehicles_V2I ])
-
-        # ---- V2V → eNB Channel ---- Create a matrix of shape (num_veh_V2V)
-        self.pathloss_V2V_eNB = np.array([
-            self.compute_V2I_pathloss(v2v.position) for v2v in self.vehicles_V2V ])
-
-        # ---- V2V → V2V Channel ---- Create a matrix of shape (num_veh_V2V, num_veh_V2V)
-        n = self.num_veh_V2V
-        self.pathloss_V2V_V2V = np.array((n,n))
-        for i in range(n):
-            for j in range(i+1, n):
-                pl = self.compute_V2V_pathloss(self.vehicles_V2V[i].position, self.vehicles_V2V[j].position)
-                self.pathloss_V2V_V2V[i, j] = pl
-                self.pathloss_V2V_V2V[j, i] = pl
-
-
     def compute_V2V_pathloss(self, pos_a, pos_b):
-        """compute V2V pathloss for 2 vehicles given positional data
-            (between either V2V or V2I vehicles)
+        """compute V2V pathloss for any 2 vehicles (V2V or V2I) given positional
+            data between vehicles. Fastfading included if self.fast_fading = True
             Inputs: Positional data of 2 vehicles [m]
             Output: pathloss [dB]"""
         #compute euclidean distance b/w vehicles
@@ -547,8 +704,8 @@ class V2XEnvironment(gym.Env):
         return PL
 
     def compute_V2I_pathloss(self, pos_a):
-        """compute V2I pathloss for 1 vehicle and BaseStation
-            (between either V2V or V2I vehicles)
+        """compute V2I pathloss for any 1 vehicle and BaseStation (V2V or V2I) vehicles.
+            Fastfading included if self.fast_fading = True
                     Inputs: Positional data 1 vehicle [m]
                     Output: pathloss [dB]"""
         # compute euclidean distance b/w vehicle and BS
@@ -586,5 +743,6 @@ class V2XEnvironment(gym.Env):
 
 
 if __name__ == "__main__":
-    params = {}
+    from util.parameters import ParametersMAPPO
+    params = ParametersMAPPO()
     env = V2XEnvironment(params)

@@ -10,11 +10,10 @@ from torch.nn import functional as F
 from Agent.mappo import MAPPO_Actor, MAPPO_Critic
 from helpers.mappo_helper import BatchProcessing, compute_GAE, pre_process
 
-from Envs.UtilityCommunication.veh_position_helper import *
-from Envs.env_helper import EnvironHelper
-
-from Envs.env_params import V2Xparams
-from Envs.Environment import Environ
+# from Envs.UtilityCommunication.veh_position_helper import *
+# from Envs.zenv_helper import EnvironHelper
+# from Envs.zzenv_params import V2Xparams
+# from Envs.Environment import Environ
 
 
 class MAPPOtrainer:
@@ -48,32 +47,20 @@ class MAPPOtrainer:
                 value_history = []
                 done_history = []   #dont think I need this?
 
-                done = False
                 total_reward = 0
 
-                # for "game modes 1 or 2" (NFIG or SIG)
-                num_control_interval = 1
+                #gather episode positional data and load first sample
+                env.reset()
 
-                #set up environment for episode
-                if params.env_name == 'NFIG':
-                    sampled_data = sample_veh_position_from_timestep(env.veh_pos_data, params.env_setup)  # [25.0, 30.0, 35.0, 65.0]
-                elif params.env_name == 'SIG':
-                    sampled_data = sample_veh_positions(num_control_interval, env.veh_pos_data)
-                else:
-                    raise NotImplementedError
-                env.loaded_veh_data = sampled_data
-                env.new_random_game()
-
-                #loop for control intervals (1) ???
-                for interval in range(1, num_control_interval + 1):
+                #loop for k_max control intervals (1 for SIG and NFIG)
+                for interval in range(1, params.k_max + 1):
 
                     if interval > 1:
-                        env.renew_positions_by_file(interval)
-                        env.renew_channel()
-                        env.renew_queue()
+                        env.step_control(interval)
 
-                    #loop for timesteps in episode
-                    for t in range(params.t_max):
+
+                    #loop for timesteps in control interval
+                    for t in range(params.t_max_control):
 
                         env.renew_fast_fading()
 
@@ -82,8 +69,7 @@ class MAPPOtrainer:
                         RRA_all_agents = np.zeros([params.n_veh - 1, params.n_neighbor, 2], dtype='int32')
 
                         # Collect actions/logp/values for each agent, store in histories
-                        env_helper = EnvironHelper(params)
-                        global_state = env.get_state([0, 0], 0, t)
+                        global_state = env.get_state([0, 0], t)
                         global_state = th.tensor(global_state, dtype=th.float32).squeeze().to(device)
 
                         #loop through each agent

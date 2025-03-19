@@ -1,14 +1,8 @@
 import argparse, time, sys
 import pandas as pd
 
-import gymnasium as gym
-
-from Envs.env_params import V2Xparams
 from env.v2x_env import V2XEnvironment
-from env.env_helper import *
-
-# from Envs.Environment import Environ
-# from Envs.UtilityCommunication.veh_position_helper import *
+from env.env_helper import sample_veh_positions, remove_test_data_from_veh_pos
 
 # Import runner, trainers, and parameters classes here
 from runner.runner import ALGO_Runner
@@ -20,7 +14,7 @@ from util.parameters import ParametersMAPPO, ParametersOC, ParametersDAC
 def main():
     parser  = argparse.ArgumentParser(description = "Run different variations of algorithms and environments.")
     parser.add_argument('--env', type=str, required=True, help='The environment to run. Choose from "NFIG", "SIG", OR "POSIG".')
-    parser.add_argument('--algo', type=str, required=True, help='The algorithm to use. Choose from "ppo" or "oc" or "dac".')
+    parser.add_argument('--algo', type=str, required=True, help='The algorithm to use. Choose from "mappo" or "oc" or "dac".')
     args = parser.parse_args()
 
     """Load algorithm params and trainers"""
@@ -28,9 +22,11 @@ def main():
         params = ParametersMAPPO()
         trainer = lambda: MAPPOtrainer()
     elif args.algo == 'oc':
+        raise ValueError('not implemented')
         params = ParametersOC()
         trainer = lambda: OCtrainer()
     elif args.algo == 'dac':
+        raise ValueError('not implemented')
         params = ParametersDAC()
         trainer = lambda: DACtrainer()
     else:
@@ -38,38 +34,40 @@ def main():
 
     """Create environment"""
     #load position data from .csv
-    test_data_list = []
     veh_pos_data = pd.read_csv('env/SUMOData/4ag_4V2I.csv')
-    # print(veh_pos_data)
+    # print("Raw pd.read_csv:",veh_pos_data)
 
-
-    # print(test_data_list)
-
-
-
-    #Load test positional data
+    #Determine game_mode
     if args.env == 'NFIG':
-        #slice a single positional data sample
-        test_data_list = [sample_veh_positions(veh_pos_data, params.single_loc_idx)]
-
-    elif args.env == 'SIG' or args.env == 'POSIG':
-        if params.multi_location is False: #Single Location
-            # slice a single positional data sample
-            test_data_list = [sample_veh_positions(veh_pos_data, params.single_loc_idx)]
-        else:   #Multi Location
-            #slice multiple positional data samples
-            time_steps = range(params.multi_loc_idx[0], params.multi_loc_idx[0])
-            for step in time_steps:
-                test_data = sample_veh_positions(veh_pos_data, step)
-                test_data_list.append(test_data)
-            veh_pos_data = remove_test_data_from_veh_pos(veh_pos_data, time_steps)
+        game_mode, k_max = 1, 1
+    elif args.env == 'SIG': #TODO Review nested conditionals
+        if params.include_AoI is False:
+            game_mode, k_max = 2, 10
+        else:
+            game_mode, k_max = 3, params.k_max
+    elif args.env == 'POSIG':
+        game_mode, k_max = 4, params.k_max
     else:
-        raise ValueError("Environment name incorrect or found")
+        raise ValueError("Unknown environment")
+
+    #load env_setup params
+    env_setup = {
+        'game_mode': game_mode,
+        'k_max': k_max,  # number of control intervals
+        'fast_fading': params.fast_fading,
+        'num_agents': params.num_agents,
+        'multi_location': params.multi_location,
+        't_max_control': params.t_max_control,
+        'single_loc_idx': params.single_loc_idx,
+        'multi_loc_test_idx': params.multi_loc_test_idx,
+    }
 
     #Load environment
-    env = V2XEnvironment(params,veh_pos_data,test_data_list)
+    env = V2XEnvironment(env_setup, veh_pos_data)
 
-
+    #add additional parameters
+    params.state_dim = env.state_dim
+    params.action_dim = env.action_dim
 
     #define runner and run experiment
     runner = ALGO_Runner(env, trainer)
