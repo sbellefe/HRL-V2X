@@ -7,21 +7,22 @@ class SharedParams:
         super(SharedParams, self).__init__()
         self.device = th.device('cuda' if th.cuda.is_available() else 'cpu')
 
-        """global hyperparams"""
+        """global hyperparams""" #TODO add testing params
         self.num_trials = 5
-        self.total_train_episodes = 20000 #100000  # number of control episodes
-        #TODO Change to t_max_communication?
-        self.t_max_control = 10        # max timesteps (communication intervals) per control interval
-        self.k_max = 10                 #number of control intervals per episode (POSIG only)
+        self.total_train_episodes = 5000 #100000  # number of control episodes
+        self.t_max = 10        # max timesteps (communication intervals) per control interval
+        self.k_max = 10                 #number of control intervals per episode (AoI only)
         self.num_agents = 4
+        self.test_interval = 100
+        self.test_episodes = 10
 
         """global environment parameters"""
         self.multi_location = True
         self.fast_fading = True
-        self.include_AoI = False    #TODO Is this only for POSIG or could be SIG too?
-        self.single_loc_idx = 25.0    #only used for NFIG, SIG_SL
+        self.include_AoI = False
+        self.partial_observability = False
+        self.single_loc_idx = 25.0 #only used for NFIG, SIG_SL
         self.multi_loc_test_idx = range(35, 45)   #only used for SIG_ML, POSIG
-        # self.game_mode = 2 # 1:Chanel only NFIG, 2:++Queue SIG, 3:++AoI, 4:POSIG
 
 
 class ParametersMAPPO(SharedParams):

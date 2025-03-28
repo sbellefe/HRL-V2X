@@ -39,27 +39,32 @@ def main():
 
     #Determine game_mode
     if args.env == 'NFIG':
-        game_mode, k_max = 1, 1
-    elif args.env == 'SIG': #TODO Review nested conditionals
-        if params.include_AoI is False:
-            game_mode, k_max = 2, 10
-        else:
-            game_mode, k_max = 3, params.k_max
+        game_mode = 1
+    elif args.env == 'SIG':
+        game_mode = 2 if not params.include_AoI else 3
     elif args.env == 'POSIG':
-        game_mode, k_max = 4, params.k_max
+        game_mode = 4 if not params.include_AoI else 5
     else:
         raise ValueError("Unknown environment")
+
+    #determine number of control intervals per episode
+    if game_mode in [1,2,4]:
+        k_max = 1
+        params.k_max = k_max
+    elif game_mode in [3,5]:
+        k_max = params.k_max
 
     #load env_setup params
     env_setup = {
         'game_mode': game_mode,
-        'k_max': k_max,  # number of control intervals
-        'fast_fading': params.fast_fading,
+        'k_max': k_max,  #number of control intervals
+        't_max': params.t_max,  #length of control interval
         'num_agents': params.num_agents,
+        'fast_fading': params.fast_fading,
         'multi_location': params.multi_location,
-        't_max_control': params.t_max_control,
         'single_loc_idx': params.single_loc_idx,
         'multi_loc_test_idx': params.multi_loc_test_idx,
+        'partial_observability': params.partial_observability,
     }
 
     #Load environment

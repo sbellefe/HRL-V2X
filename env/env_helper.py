@@ -25,14 +25,14 @@ def sample_veh_positions(data, time_step=None, k_max=None):
             time_step (int): single timestep to sample
             k_max (int): number of consecutive timesteps to sample
         Returns: slice of dataframe"""
-
+#TODO: allow selection of multiple pos samples starting at specific timestep (test data for AoI)
+    #TODO: add functionality to take as input time_step = [list of indexes]
     if k_max is not None:   #Multi-location use case
         unique_time_steps = data['time'].nunique()
         sorted_time_steps = data['time'].drop_duplicates().sort_values()
 
         # Check if there are enough time steps to sample TODO should this really exit the code?
-        if k_max > unique_time_steps:
-            raise ValueError("Not enough time steps to sample")
+        if k_max > unique_time_steps: raise ValueError("Not enough time steps to sample")
 
         # Randomly select a block of time steps
         start_index = np.random.randint(0, unique_time_steps - k_max + 1)
