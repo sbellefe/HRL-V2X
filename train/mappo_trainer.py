@@ -50,53 +50,53 @@ class MAPPOtrainer:
                 total_reward = 0
 
                 #gather episode positional data and load first sample
-                env.reset()
+                global_state = env.reset()
+                global_state = th.tensor(global_state, dtype=th.float32).squeeze()
 
-                #loop for k_max control intervals (1 for SIG and NFIG)
-                for interval in range(1, params.k_max + 1):
+                #loop for k_max control intervals (1 for without AoI)
+                for k in range(1, params.k_max + 1):
 
-                    if interval > 1:
-                        env.step_control(interval)
+                    if k > 1:
+                        env.step_control(k)
 
 
                     #loop for timesteps in control interval
-                    for t in range(params.t_max_control):
-
-                        env.renew_fast_fading()
-
+                    for t in range(params.t_max):
 
                         actions, logps = [],[]
-                        RRA_all_agents = np.zeros([params.n_veh - 1, params.n_neighbor, 2], dtype='int32')
+                        RRA_all_agents = np.zeros([env.num_veh_V2V - 1, env.n_neighbor, 2], dtype='int32')
 
                         # Collect actions/logp/values for each agent, store in histories
-                        global_state = env.get_state([0, 0], t)
-                        global_state = th.tensor(global_state, dtype=th.float32).squeeze().to(device)
+                        # global_state = env.get_state([0, 0], t)
+                        # global_state = th.tensor(global_state, dtype=th.float32).squeeze().to(device)
 
                         #loop through each agent
                         for a in range(params.num_agents):
                             agent_id = F.one_hot(th.tensor(a), num_classes=params.num_agents).float().to(device)
+                            # print(f"Agent {a} is {agent_id}")
 
                             with th.no_grad():
                                 logits = actor_shared(global_state, agent_id)
                                 action, logp = actor_shared.select_action(logits)
+                                # print(f"{env.action_dim} - Agent {a} action: {action}")
                                 logps.append(logp)
                                 actions.append(action.item())
-                                RRA_all_agents[a, 0, 0], RRA_all_agents[a, 0, 1] = env_helper.mapping_action2RRA(action)
+                                RRA_all_agents[a, 0, 0], RRA_all_agents[a, 0, 1] = env.mapping_action2RRA(action)
                                 value = central_critic(global_state, agent_id)
 
                         #Take step with joint actions
                         joint_actions = actions
-                        global_reward, individual_ag_rewards, V2I_throughput, done = env.step(RRA_all_agents.copy(), t, interval)
+                        global_next_state, global_reward, done = env.step(RRA_all_agents.copy(), t, k)
 
-                        if params.env_name == 'NFIG':
-                            global_reward = global_reward[0, 0] + sum(V2I_throughput)
-                        else:
-                            global_reward = global_reward[0, 0]
 
-                        # print(f"Timestep {t}: "
-                        #       f"global_state: {global_state}\n"
+                        # print(f"\n*************Timestep {t}: \n"
+                        #       f"global_state: {global_state.shape}\n"
                         #       f"joint_actions: {joint_actions}\n"
-                        #       f"global_reward: {global_reward}\n")
+                        #       f"RRA_all_agents: {RRA_all_agents.shape}\n"
+                        #       f"logp: {logps}\n"
+                        #       f"global_reward: {global_reward}\n"
+                        #       f"value: {value}\n"
+                        #       )
 
                         state_history.append(global_state)
                         action_history.append(joint_actions)
@@ -105,9 +105,10 @@ class MAPPOtrainer:
                         value_history.append(value.item())
 
                         total_reward += global_reward
+                        global_state = th.tensor(global_next_state, dtype=th.float32).squeeze()
 
                         if done:
-                            # print(f'**********Training Episode {n_ep + 1} complete. Global Reward: {total_reward:.3f}')
+                            # print(f'**********Training Episode {n_ep + 1} complete. Global Reward: {total_reward[0,0]:.3f}')
                             break
 
                 n_ep += 1
@@ -128,7 +129,7 @@ class MAPPOtrainer:
                 # test at interval and print result
                 if n_ep % params.test_interval == 0:
                     # show_testing = False if n_ep < params.render_delay and params.show_testing else True
-                    test_reward = self.test(deepcopy(actor_shared), params, env.test_data_list,env.loaded_veh_data)
+                    test_reward = self.test(deepcopy(actor_shared), params, env)
                     test_rewards.append(test_reward)
 
                     # plt.figure(1)
@@ -217,62 +218,56 @@ class MAPPOtrainer:
         return train_rewards, test_rewards
 
     @staticmethod
-    def test(actor, params, test_data_list, loaded_veh_data):
-        # env_params = V2Xparams()
-        env = Environ(params)
+    def test(actor, params, env):
 
+        env.testing_mode = True
         test_rewards = np.zeros(params.test_episodes)
 
         for i in range(params.test_episodes):
 
             total_rewards = 0
 
-            test_data = test_data_list[i % len(test_data_list)]
-            params.loaded_veh_data = test_data
-            env.loaded_veh_data = params.loaded_veh_data
-            env.new_random_game()
+            # test_data = test_data_list[i % len(test_data_list)]
+            # params.loaded_veh_data = test_data
+            # env.loaded_veh_data = params.loaded_veh_data
 
-            if params.game_mode == 1 or params.game_mode == 2:
-                num_control_interval = 1
-            else:
-                num_control_interval = params.t_max_control
+            # env.new_random_game()
+            #
+            # if params.game_mode == 1 or params.game_mode == 2:
+            #     num_control_interval = 1
+            # else:
+            #     num_control_interval = params.t_max_control
 
-            for interval in range(1, num_control_interval + 1):
+            global_state = env.reset()
+
+            for interval in range(1, params.k_max + 1):
 
                 if interval > 1:
-                    env.renew_positions_by_file(interval)
-                    env.renew_channel()
-                    env.renew_queue()
+                    env.step_control()
 
-                for t in range(params.n_step_per_episode_communication):
-                    if params.if_fastFading:
-                        env.renew_fast_fading()
+                for t in range(params.t_max):
 
-                    actions = []
-                    RRA_all_agents = np.zeros([params.n_veh - 1, params.n_neighbor, 2], dtype='int32')
+                    actions = []  #No need to store these?
+                    RRA_all_agents = np.zeros([env.num_veh_V2V - 1, env.n_neighbor, 2], dtype='int32')
 
-                    environ_helper = EnvironHelper(params)
-                    state = env.get_state([0, 0, ], 0, t)
-                    state = th.tensor(state, dtype=th.float32).squeeze()
+                    global_state = th.tensor(global_state, dtype=th.float32).squeeze()
                     for a in range(params.num_agents):
                         agent_id = F.one_hot(th.tensor(a), num_classes=params.num_agents).float()
-                        logits = actor(state, agent_id)
+                        logits = actor(global_state, agent_id)
                         action, _ = actor.select_action(logits)
                         actions.append(action.item())
-                        RRA_all_agents[a, 0, 0], RRA_all_agents[a, 0, 1] = environ_helper.mapping_action2RRA(action)
+                        RRA_all_agents[a, 0, 0], RRA_all_agents[a, 0, 1] = env.mapping_action2RRA(action)
 
                     joint_action = actions
-                    global_reward, individual_ag_rewards, V2I_throughput, done = env.step(RRA_all_agents.copy(), t,
-                                                                                          interval)
+                    global_next_state, global_reward, done = env.step(RRA_all_agents.copy(), t, interval)
 
-                    if params.game_mode == 1:
-                        total_rewards += (global_reward[0, 0] + sum(V2I_throughput))
-                    else:
-                        total_rewards += global_reward[0, 0]
+                    total_rewards += global_reward
+
 
             test_rewards[i] += total_rewards
 
         average_reward = np.mean(test_rewards)
+        env.testing_mode = False
         return average_reward
 
 

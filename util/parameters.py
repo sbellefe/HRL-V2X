@@ -18,11 +18,11 @@ class SharedParams:
 
         """global environment parameters"""
         self.multi_location = True
-        self.fast_fading = True
+        self.fast_fading = False
         self.include_AoI = False
-        self.partial_observability = False
+        # self.partial_observability = False REMOVED SINCE THIS IS HANDLED BY input args
         self.single_loc_idx = 25.0 #only used for NFIG, SIG_SL
-        self.multi_loc_test_idx = range(35, 45)   #only used for SIG_ML, POSIG
+        self.multi_loc_test_idx = range(35, 45) #only used for SIG_ML, POSIG (could also be a list of specific data points)
 
 
 class ParametersMAPPO(SharedParams):
