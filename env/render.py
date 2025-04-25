@@ -68,7 +68,7 @@ class HighwayVisualizer:
         # Pygame clock
         self.clock = pygame.time.Clock()
 
-    def draw_frame(self, pos_sample_df, position_info, t0, testing, fps=0):
+    def draw_frame(self, pos_sample_df, position_info, testing, fps=0):
         """
         Renders a frame from a DataFrame containing columns:
             ['time', 'id', 'x', 'y', 'angle', 'speed', 'lane']
@@ -137,10 +137,11 @@ class HighwayVisualizer:
         self._draw_v2v_arrows(vehicles)
 
         # 6) Draw the white textbox with pathloss information in the top green area
-        self._draw_pathloss_textbox(position_info, vehicles)
+        self._draw_pathloss_textbox(position_info)
 
         #bottom left text
         mode = "Testing" if testing else "Training"
+        t0 = pos_sample_df.iloc[0]['time']
         self._draw_text(f"{mode} Dataset Time index: {t0:.1f} seconds", self.screen_width/2, 480, font_size=20, align="center")
 
         # 7) Flip display
@@ -340,7 +341,7 @@ class HighwayVisualizer:
         return center_screen_y - (y_m * self.scale_y)
 
 
-    def _draw_pathloss_textbox(self, position_info, vehicles):
+    def _draw_pathloss_textbox(self, position_info):
         """
         Draws a white textbox in the top area of the screen and prints the
         pathloss information using the vehicle labels.
@@ -543,7 +544,7 @@ class HighwayVisualizer:
         mid_h_x = corner_x + x_scale_px // 2
         # self._draw_text(f"{x_scale_m} m", mid_h_x, corner_y + 20, font_size=16, color=scale_color, align="center")
 
-        # ----- Vertical Scale Bar -----
+        # ----- Vertical Scale Bar ----- TODO: coordinate system instead of scale? or origin at least?
         y_scale_m = 5
         y_scale_px = int(y_scale_m * self.scale_y)
 

@@ -23,14 +23,23 @@ class MAPPOtrainer:
     def train(self, trial, env, params):
         device = params.device
 
-        actor_shared = MAPPO_Actor(params).to(device)
-        central_critic = MAPPO_Critic(params).to(device)
+        """Initialize network(s) and optimizers"""
+        actor = MAPPO_Actor(params).to(device)
+
+        if not params.partial_observability:
+            actor_shared = MAPPO_Actor(params).to(device)
+            central_critic = MAPPO_Critic(params).to(device)
+            actor_opt = th.optim.Adam(actor_shared.parameters(), lr=params.lr_actor)
+        else:
+            actor_list = actors = [MAPPO_Actor(params.state_dim, params.actor_hidden_dim, params.action_dim).to(device) for _ in range(params.num_agents)]
+        #
+
+        critic_opt = th.optim.Adam(central_critic.parameters(), lr=params.lr_critic)
 
         # actors = [MAPPO_Actor(params.state_dim, params.actor_hidden_dim, params.action_dim).to(device) for _ in range(params.num_agents)]
         # critics = [MAPPO_Critic(params.state_dim, params.critic_hidden_dim).to(device) for _ in range(params.num_agents)]
 
-        actor_opt = th.optim.Adam(actor_shared.parameters(), lr=params.lr_actor)
-        critic_opt = th.optim.Adam(central_critic.parameters(), lr=params.lr_critic)
+
 
         train_rewards = []
         test_rewards = []
@@ -50,7 +59,7 @@ class MAPPOtrainer:
                 total_reward = 0
 
                 #gather episode positional data and load first sample
-                global_state = env.reset()
+                global_state, local_states = env.reset()
                 global_state = th.tensor(global_state, dtype=th.float32).squeeze()
 
                 #loop for k_max control intervals (1 for without AoI)
@@ -86,7 +95,7 @@ class MAPPOtrainer:
 
                         #Take step with joint actions
                         joint_actions = actions
-                        global_next_state, global_reward, done = env.step(RRA_all_agents.copy(), t, k)
+                        global_next_state, local_next_states, global_reward, done = env.step(RRA_all_agents.copy(), k, t)
 
 
                         # print(f"\n*************Timestep {t}: \n"
@@ -221,6 +230,7 @@ class MAPPOtrainer:
     def test(actor, params, env):
 
         env.testing_mode = True
+
         test_rewards = np.zeros(params.test_episodes)
 
         for i in range(params.test_episodes):

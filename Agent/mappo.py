@@ -8,25 +8,58 @@ from torch.distributions import Categorical
 class MAPPO_Actor(nn.Module):
     def __init__(self, params):
         super(MAPPO_Actor, self).__init__()
-        self.state_dim = params.state_dim + params.num_agents
-        self.action_dim = params.action_dim
-        self.hidden_dim = params.actor_hidden_dim
+        self.output_dim = params.action_dim
+        self.partial = params.partial_observability
+        hidden = params.actor_hidden_dim
 
-        self.fc1 = nn.Linear(self.state_dim, self.hidden_dim[0])
-        self.fc2 = nn.Linear(self.hidden_dim[0], self.hidden_dim[1])
-        self.fc3 = nn.Linear(self.hidden_dim[1], self.action_dim)
+        if not self.partial:
+            input_dim = params.state_dim + params.num_agents
+            self.gru = nn.GRU(hidden[0], hidden[1], batch_first=True)
+        else:
+            input_dim = params.obs_dim + params.action_dim + params.num_agents
+
+        self.fc_in = nn.Linear(input_dim, hidden[0])
+        self.fc2 = nn.Linear(hidden[0], hidden[1])
+        self.fc_out = nn.Linear(hidden[1], self.output_dim)
 
         self.initialize_weights()
 
     def initialize_weights(self):
-        nn.init.orthogonal_(self.fc1.weight)
-        nn.init.orthogonal_(self.fc2.weight)
-        nn.init.orthogonal_(self.fc3.weight)
-        nn.init.constant_(self.fc1.bias, 0)
-        nn.init.constant_(self.fc2.bias, 0)
-        nn.init.constant_(self.fc3.bias, 0)
+        for m in self.modules():
+            if isinstance(m, nn.Linear):
+                nn.init.orthogonal_(m.weight)
+                nn.init.constant_(m.bias, 0)
 
-    def forward(self, state, agent_id):
+
+    def forward(self, *args):
+        """Fully observable: forward(state, agent_id)
+          - state:  [batch, state_dim]
+          - agent_id: [batch, num_agents]
+          returns logits [batch, action_dim]
+
+        Partially observable GRU: forward(x, hidden_state)
+          - x:            [batch, obs_dim + action_dim + num_agents]
+          - hidden_state: [1, batch, hidden[1]]
+          returns (logits [batch, action_dim], new_hidden [1, batch, hidden[1]])
+        """
+        if self.partial:
+            x, h = args
+            x = th.tanh(self.fc_in(x))
+            # GRU expects [B, T, features]; here T=1
+            x, h_new = self.gru(x.unsqueeze(1), h)
+            logits = self.fc_out(x.squeeze(1))
+            return logits, h_new
+
+        else:
+            state, agent_id = args
+            x = th.cat([state, agent_id], dim=-1)
+            x = th.tanh(self.fc_in(x))
+            x = th.tanh(self.fc2(x))
+            logits = self.fc_out(x)
+            return logits
+
+
+    def forward_Z(self, state, agent_id):
         """Create state for agent_index and pass through
             network to get logits"""
         x = th.cat([state, agent_id], dim=-1)

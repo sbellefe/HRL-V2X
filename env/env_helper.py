@@ -43,12 +43,8 @@ def sample_veh_positions(data, t0=None, k_max=1):
     sampled_time_steps = unique_time_steps[start_idx:start_idx + k_max]
     sampled_data = data[data['time'].isin(sampled_time_steps)]
 
-    # print(unique_time_steps)
-    # sys.exit()
 
-    start_idx = unique_time_steps[start_idx]
-
-    return sampled_data, start_idx #TODO SHOULD WRONG IDX
+    return sampled_data
 
 
 def remove_test_data_from_veh_pos(veh_pos_data, time_steps):
