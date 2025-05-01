@@ -131,7 +131,9 @@ class MAPPOtrainer:
                             local_states = th.tensor(local_next_states, dtype=th.float32).squeeze()
 
                         if done:
-                            # print(f'**********Training Episode {n_ep + 1} complete. Global Reward: {total_reward[0,0]:.3f}')
+                            print(f'****Training Episode {n_ep + 1} complete. pos_idx = {env.current_veh_positions.iloc[0]["time"]} | '
+                                  f'Global Reward: {total_reward:.3f}')
+
                             break
 
                 n_ep += 1
@@ -166,7 +168,7 @@ class MAPPOtrainer:
                     # plt.draw()
                     # plt.pause(1)
 
-                    print(f'Test return at episode {n_ep}: {test_reward:.3f}.')
+                    print(f'Test return at episode {n_ep}: {test_reward:.3f}. Average train return: {np.mean(train_rewards[-params.test_interval]):.3f}')
 
             #process buffer once full
             batch_process = BatchProcessing()
@@ -268,6 +270,7 @@ class MAPPOtrainer:
             #     num_control_interval = params.t_max_control
 
             global_state, local_states = env.reset()
+            global_state = th.tensor(global_state, dtype=th.float32).squeeze()
 
             for k in range(1, params.k_max + 1):
 
@@ -279,7 +282,7 @@ class MAPPOtrainer:
                     actions = []  #No need to store these?
                     # RRA_all_agents = np.zeros([env.num_veh_V2V - 1, env.n_neighbor, 2], dtype='int32')
 
-                    global_state = th.tensor(global_state, dtype=th.float32).squeeze()
+
                     for a in range(params.num_agents):
                         agent_id = F.one_hot(th.tensor(a), num_classes=params.num_agents).float()
                         logits = actor(global_state, agent_id)
@@ -289,6 +292,7 @@ class MAPPOtrainer:
 
                     joint_action = actions
                     global_next_state, _, global_reward, done = env.step(actions, k, t)
+                    global_state = th.tensor(global_next_state, dtype=th.float32).squeeze()
 
                     total_rewards += global_reward
 

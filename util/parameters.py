@@ -9,10 +9,10 @@ class SharedParams:
 
         """global hyperparams""" #TODO add testing params
         self.num_trials = 5
-        self.total_train_episodes = 5000 #100000  # number of control episodes
+        self.total_train_episodes = 100000#5000 #100000  # number of control episodes
         self.t_max = 10        # max timesteps (communication intervals) per control interval
         self.k_max = 10                 #number of control intervals per episode (AoI only)
-        self.num_agents = 4
+        self.num_agents = 1
         self.test_interval = 100
         self.test_episodes = 10
 
@@ -22,7 +22,8 @@ class SharedParams:
         self.include_AoI = False
         # self.partial_observability = False REMOVED SINCE THIS IS HANDLED BY input args
         self.single_loc_idx = 25.0 #only used for NFIG, SIG_SL
-        self.multi_loc_test_idx = range(35, 45) #only used for SIG_ML, POSIG (could also be a list of specific data points)
+        self.multi_loc_test_idx = range(10,60,5)  #only used for SIG_ML, POSIG
+        # self.multi_loc_test_idx = range(35, 45)  #only used for SIG_ML, POSIG (could also be a list of specific data points)
 
 
 class ParametersMAPPO(SharedParams):

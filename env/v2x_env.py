@@ -55,11 +55,16 @@ class V2XEnvironment:
         self.norm_V2V_channel_factor = 120  # Normalization factor for V2V channel
         self.d_bp = 4 * (self.h_bs-1) * (self.h_ms-1) * self.fc / 3e8   #V2V breakpoint distance
 
-        #Reward weights
-        self.lambda1 = 0.001  # reward weight corresponding to TODO V2I ??? used for V2V???
-        self.lambda2 = 0.1  # reward weight corresponding to V2V TODO used * V2V_SE
-        self.lambda3 = 1  # reward weight corresponding to AoI
-        self.reward_G = 5.0  # reward weight corresponding to V2V data rate
+        #Reward constants no AoI (gamemodes 2,4)
+        self.lambda1 = 0.01  # reward weight for V2V_SE term, if queue != empty
+        self.reward_G = 5.0  # reward constant for queue = empty
+
+        #Reward constants w/ AoI (gamemodes 3,5)
+        self.lambda2 = 0.1  # reward weight for V2V_SE term
+        self.lambda3 = 1  # reward weight for AoI term
+
+        # self.lambda1 = 0.001  # NOT USED
+
 
         # Queue related
         self.NQ = 1  # number of buffer size at each agent
@@ -67,7 +72,7 @@ class V2XEnvironment:
         self.bandwidth_per_SC = int(1000000)  # bandwidth of each sub-channel in Hz
         self.CAM_size = 25600  # number of bits per cooperative awareness message (''CAM), in bits'
 
-        """extract and format train/test data samples"""
+        """extract and format train/test data samples (veh_pos_data has 600 samples)"""
         if not self.multi_location:  # NFIG & SIG-sloc only
             self.veh_pos_data = sample_veh_positions(veh_pos_data, t0=self.single_loc_idx)
             self.test_data_list = self.veh_pos_data
@@ -339,6 +344,11 @@ class V2XEnvironment:
 
         #---- Get next state ----
         global_next_state, local_next_states = self.get_state(t_step=t)
+
+        print(f"**step: {t} | "
+              f"global_reward = {global_reward:.2f} | "
+              f"individual_rewards = {np.round(individual_rewards, decimals=2)} | "
+              f"queue = {np.round(self.queue, decimals=2)}")
 
 
         return global_next_state, local_next_states, global_reward, done
@@ -680,7 +690,7 @@ class V2XEnvironment:
             global_reward = np.sum(V2V_SE) + np.sum(V2I_SE)
             individual_rewards = []
         elif self.game_mode in [2, 4]:
-            individual_rewards = np.where(queue <= 0, self.reward_G, V2V_SE * 0.01)
+            individual_rewards = np.where(queue <= 0, self.reward_G, V2V_SE * self.lambda1)
             global_reward = np.sum(individual_rewards)
             # global_reward = np.array([[np.sum(individual_rewards)]])
         elif self.game_mode in [3, 5]:
