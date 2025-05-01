@@ -54,7 +54,7 @@ class MAPPOtrainer:
                 logp_history = []
                 reward_history = []
                 value_history = []
-                done_history = []   #dont think I need this?
+                obs_history = []   #dont think I need this?
 
                 total_reward = 0
 
@@ -66,14 +66,14 @@ class MAPPOtrainer:
                 for k in range(1, params.k_max + 1):
 
                     if k > 1:
-                        env.step_control(k)
+                        env.reset_control(k)
 
 
                     #loop for timesteps in control interval
                     for t in range(params.t_max):
 
-                        actions, logps = [],[]
-                        RRA_all_agents = np.zeros([env.num_veh_V2V - 1, env.n_neighbor, 2], dtype='int32')
+                        actions, logps, values = [],[],[]
+                        RRA_all_agents = np.zeros([params.num_agents, env.n_neighbor, 2], dtype='int32')
 
                         # Collect actions/logp/values for each agent, store in histories
                         # global_state = env.get_state([0, 0], t)
@@ -90,12 +90,20 @@ class MAPPOtrainer:
                                 # print(f"{env.action_dim} - Agent {a} action: {action}")
                                 logps.append(logp)
                                 actions.append(action.item())
-                                RRA_all_agents[a, 0, 0], RRA_all_agents[a, 0, 1] = env.mapping_action2RRA(action)
-                                value = central_critic(global_state, agent_id)
+                                # value = central_critic(global_state, agent_id)
+                                # values.append(value.item())
+                                # RRA_all_agents[a, 0, 0], RRA_all_agents[a, 0, 1] = env.mapping_action2RRA(action)
+
+
+                        # print(f"ep={n_ep}; t={t}. a={actions}   |\n    RRA_all_agents={RRA_all_agents[:, 0, :] }\n\n")
+                        with th.no_grad():
+                            value = central_critic(global_state)
+
 
                         #Take step with joint actions
-                        joint_actions = actions
-                        global_next_state, local_next_states, global_reward, done = env.step(RRA_all_agents.copy(), k, t)
+                        # joint_actions = actions
+                        # global_next_state, local_next_states, global_reward, done = env.step(RRA_all_agents.copy(), k, t)
+                        global_next_state, local_next_states, global_reward, done = env.step(actions, k, t)
 
 
                         # print(f"\n*************Timestep {t}: \n"
@@ -108,13 +116,19 @@ class MAPPOtrainer:
                         #       )
 
                         state_history.append(global_state)
-                        action_history.append(joint_actions)
+                        action_history.append(actions)
                         logp_history.append(logps)
+                        # reward_history.append(individual_rewards)
                         reward_history.append(global_reward)
-                        value_history.append(value.item())
+                        value_history.append(value)
+                        # value_history.append(values)
 
                         total_reward += global_reward
                         global_state = th.tensor(global_next_state, dtype=th.float32).squeeze()
+
+                        if params.partial_observability:
+                            obs_history.append(local_next_states)
+                            local_states = th.tensor(local_next_states, dtype=th.float32).squeeze()
 
                         if done:
                             # print(f'**********Training Episode {n_ep + 1} complete. Global Reward: {total_reward[0,0]:.3f}')
@@ -180,13 +194,18 @@ class MAPPOtrainer:
                     # Critic Update
                     critic_opt.zero_grad()
                     total_critic_loss = 0
-                    for a in range(params.num_agents):
-                        agent_id = F.one_hot(th.tensor(a), num_classes=params.num_agents).float().unsqueeze(0).repeat(states_mb.size(0), 1).to(device)
-                        values = central_critic(states_mb, agent_id)
-                        critic_loss = central_critic.critic_loss(values, values_mb, returns_mb, params.eps_clip)
-                        total_critic_loss += critic_loss
-                    total_critic_loss /= params.num_agents
-                    total_critic_loss.backward()
+                    values_new = central_critic(states_mb)
+                    critic_loss = central_critic.critic_loss(values_new, values_mb, returns_mb, params.eps_clip)
+
+                    # for a in range(params.num_agents):
+                    #     agent_id = F.one_hot(th.tensor(a), num_classes=params.num_agents).float().unsqueeze(0).repeat(states_mb.size(0), 1).to(device)
+                    #     values = central_critic(states_mb, agent_id)
+                    #     critic_loss = central_critic.critic_loss(values, values_mb, returns_mb, params.eps_clip)
+                    #     total_critic_loss += critic_loss
+
+                    # total_critic_loss /= params.num_agents
+                    # total_critic_loss.backward()
+                    critic_loss.backward()
                     critic_opt.step()
 
                     # Actor Update
@@ -248,17 +267,17 @@ class MAPPOtrainer:
             # else:
             #     num_control_interval = params.t_max_control
 
-            global_state = env.reset()
+            global_state, local_states = env.reset()
 
-            for interval in range(1, params.k_max + 1):
+            for k in range(1, params.k_max + 1):
 
-                if interval > 1:
-                    env.step_control()
+                if k > 1:
+                    env.reset_control()
 
                 for t in range(params.t_max):
 
                     actions = []  #No need to store these?
-                    RRA_all_agents = np.zeros([env.num_veh_V2V - 1, env.n_neighbor, 2], dtype='int32')
+                    # RRA_all_agents = np.zeros([env.num_veh_V2V - 1, env.n_neighbor, 2], dtype='int32')
 
                     global_state = th.tensor(global_state, dtype=th.float32).squeeze()
                     for a in range(params.num_agents):
@@ -266,10 +285,10 @@ class MAPPOtrainer:
                         logits = actor(global_state, agent_id)
                         action, _ = actor.select_action(logits)
                         actions.append(action.item())
-                        RRA_all_agents[a, 0, 0], RRA_all_agents[a, 0, 1] = env.mapping_action2RRA(action)
+                        # RRA_all_agents[a, 0, 0], RRA_all_agents[a, 0, 1] = env.mapping_action2RRA(action)
 
                     joint_action = actions
-                    global_next_state, global_reward, done = env.step(RRA_all_agents.copy(), t, interval)
+                    global_next_state, _, global_reward, done = env.step(actions, k, t)
 
                     total_rewards += global_reward
 

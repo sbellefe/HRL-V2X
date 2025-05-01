@@ -50,18 +50,21 @@ def main():
     else:
         raise ValueError("Unknown environment")
 
-    #determine number of control intervals per episode
-    if game_mode in [1,2,4]:
+    #set number of control intervals / episode
+    if game_mode in [1,2,4]:  #no AoI
         k_max = 1
         params.k_max = k_max
-    elif game_mode in [3,5]:
+    elif game_mode in [3,5]:  #AoI
         k_max = params.k_max
+
+    #override t_max for NFIG setup
+    t_max = 1 if game_mode == 1 else params.t_max
 
     #load env_setup params
     env_setup = {
         'game_mode': game_mode,
         'k_max': k_max,  #number of control intervals
-        't_max': params.t_max,  #length of control interval
+        't_max': t_max,  #length of control interval
         'num_agents': params.num_agents,
         'fast_fading': params.fast_fading,
         'multi_location': params.multi_location,

@@ -57,6 +57,12 @@ def compute_GAE(rewards, values, gamma, gae_lambda, device):
 
     for t in reversed(range(len(rewards))):
         #compute TD error
+        # print(f"rewards: {rewards[t]}\n")
+        #       f"rewards[t]: {rewards[t]}\n"
+        #       f"values: {values}\n")
+        # print(f"Type of rewards[{t}]:", type(rewards[t]), "Value:", rewards[t])
+        # print(f"Type of values[{t}]:", type(values[t]), "Value:", values[t])
+        # print(f"Type of values[{t+1}]:", type(values[t+1]), "Value:", values[t+1])
         delta = rewards[t] + gamma * values[t + 1] - values[t]
 
         #compute GAE advantage

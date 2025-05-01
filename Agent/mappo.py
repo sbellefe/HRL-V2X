@@ -114,7 +114,8 @@ class MAPPO_Actor(nn.Module):
 class MAPPO_Critic(nn.Module):
     def __init__(self, params):
         super(MAPPO_Critic, self).__init__()
-        self.state_dim = params.state_dim + params.num_agents
+        self.state_dim = params.state_dim
+        # self.state_dim = params.state_dim + params.num_agents
         self.action_dim = params.action_dim
         self.hidden_dim = params.critic_hidden_dim
 
@@ -125,17 +126,17 @@ class MAPPO_Critic(nn.Module):
         self.initialize_weights()
 
     def initialize_weights(self):
-        nn.init.orthogonal_(self.fc1.weight)
-        nn.init.orthogonal_(self.fc2.weight)
-        nn.init.orthogonal_(self.fc3.weight)
-        nn.init.constant_(self.fc1.bias, 0)
-        nn.init.constant_(self.fc2.bias, 0)
-        nn.init.constant_(self.fc3.bias, 0)
+        for m in self.modules():
+            if isinstance(m, nn.Linear):
+                nn.init.orthogonal_(m.weight)
+                nn.init.constant_(m.bias, 0)
 
-    def forward(self, state, agent_id):
+    def forward(self, state):
+    # def forward(self, state, agent_id):
         """Create state for agent_index and pass through
             network to get logits"""
-        x = th.cat([state, agent_id], dim=-1)
+        # x = th.cat([state, agent_id], dim=-1)
+        x = state
         x = F.tanh(self.fc1(x))
         x = F.tanh(self.fc2(x))
         value = self.fc3(x)
