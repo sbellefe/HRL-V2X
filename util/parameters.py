@@ -20,7 +20,7 @@ class SharedParams:
         self.multi_location = True
         self.fast_fading = False
         self.include_AoI = False
-        self.single_loc_idx = 25.0 #only used for NFIG, SIG_SL
+        self.single_loc_idx = 25.1 #only used for NFIG, SIG_SL
         self.multi_loc_test_idx = range(20,30)  #only used for SIG_ML, POSIG
         # self.multi_loc_test_idx = range(10,50,4)  #only used for SIG_ML, POSIG
         # self.multi_loc_test_idx = range(35, 45)  #only used for SIG_ML, POSIG (could also be a list of specific data points)
@@ -34,10 +34,10 @@ class ParametersMAPPO(SharedParams):
         super(ParametersMAPPO, self).__init__()
 
         # training loop hyperparameters
-        self.buffer_episodes = 128 #32 # or "batch_size" num episodes in batch buffer
+        self.buffer_episodes = 64#128 #32 # or "batch_size" num episodes in batch buffer
         self.opt_epochs = 10    #num optimization epochs per batch buffer
         # self.mini_batch_size = 320
-        self.num_mini_batches = 4 #1
+        self.num_mini_batches = 2 #4
         self.train_iterations = math.ceil(self.total_train_episodes / self.buffer_episodes) #top-lvl loop index
 
         # network hyperparameters

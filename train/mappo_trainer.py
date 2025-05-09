@@ -32,7 +32,7 @@ class MAPPOtrainer:
             for ep in range(params.buffer_episodes):
 
                 if params.partial_observability:    #Initialize first timestep RNN hidden states to zero
-                    #shape list(len(num_agents). for each agent, shape = (batch episode idx, timestep idx, hidden dim)
+                    #shape list(len(num_agents). for each agent, shape = (timestep, batch episode, hidden dim)
                     hidden_states_actor = [th.zeros(1, 1, params.actor_hidden_dim[0]).to(device) for _ in range(params.num_agents)]
                     hidden_states_critic = [th.zeros(1, 1, params.critic_hidden_dim[0]).to(device) for _ in range(params.num_agents)]
                     prev_actions = [th.zeros(1, params.action_dim).to(device) for _ in range(params.num_agents)]
@@ -358,6 +358,8 @@ class MAPPOtrainer:
     def test(actor, params, env):
         device = params.device
         env.testing_mode = True
+        actor.flatten_parameters()
+        actor.train(mode=True)
 
         test_rewards = np.zeros(params.test_episodes)
 
