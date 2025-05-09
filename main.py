@@ -34,7 +34,8 @@ def main():
 
     """Create environment"""
     #load position data from .csv
-    veh_pos_data = pd.read_csv('env/SUMOData/4ag_4V2I.csv')
+    veh_pos_data = pd.read_csv('env/SUMOData/calibration.csv')
+    # veh_pos_data = pd.read_csv('env/SUMOData/4ag_4V2I.csv')
     # print("Raw pd.read_csv:",veh_pos_data)
 
     #Determine game_mode and PO boolean
@@ -71,6 +72,7 @@ def main():
         'single_loc_idx': params.single_loc_idx,
         'multi_loc_test_idx': params.multi_loc_test_idx,
         'partial_observability': partial_observability,
+        'render_mode': params.render_mode,
     }
 
     #Load environment

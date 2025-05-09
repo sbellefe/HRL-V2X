@@ -12,18 +12,21 @@ class SharedParams:
         self.total_train_episodes = 100000#5000 #100000  # number of control episodes
         self.t_max = 10        # max timesteps (communication intervals) per control interval
         self.k_max = 10                 #number of control intervals per episode (AoI only)
-        self.num_agents = 1
-        self.test_interval = 100
+        self.num_agents = 4
+        self.test_interval = 1000
         self.test_episodes = 10
 
         """global environment parameters"""
         self.multi_location = True
         self.fast_fading = False
         self.include_AoI = False
-        # self.partial_observability = False REMOVED SINCE THIS IS HANDLED BY input args
         self.single_loc_idx = 25.0 #only used for NFIG, SIG_SL
-        self.multi_loc_test_idx = range(10,60,5)  #only used for SIG_ML, POSIG
+        self.multi_loc_test_idx = range(20,30)  #only used for SIG_ML, POSIG
+        # self.multi_loc_test_idx = range(10,50,4)  #only used for SIG_ML, POSIG
         # self.multi_loc_test_idx = range(35, 45)  #only used for SIG_ML, POSIG (could also be a list of specific data points)
+
+        # self.render_mode = True
+        self.render_mode = False
 
 
 class ParametersMAPPO(SharedParams):
@@ -31,10 +34,10 @@ class ParametersMAPPO(SharedParams):
         super(ParametersMAPPO, self).__init__()
 
         # training loop hyperparameters
-        self.buffer_episodes = 32  # or "batch_size" num episodes in batch buffer
+        self.buffer_episodes = 128 #32 # or "batch_size" num episodes in batch buffer
         self.opt_epochs = 10    #num optimization epochs per batch buffer
         # self.mini_batch_size = 320
-        self.num_mini_batches = 1
+        self.num_mini_batches = 4 #1
         self.train_iterations = math.ceil(self.total_train_episodes / self.buffer_episodes) #top-lvl loop index
 
         # network hyperparameters
@@ -46,7 +49,7 @@ class ParametersMAPPO(SharedParams):
         # training value hyperparameters
         self.gamma = 0.95
         self.gae_lambda = 0.99
-        self.entropy_coef = 0.001
+        self.entropy_coef = 0.005 #0.001
         self.eps_clip = 0.2
 
 class ParametersDAC(SharedParams):

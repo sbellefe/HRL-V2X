@@ -115,6 +115,11 @@ class HighwayVisualizer:
                 label = f"V2V-{v2v_count}"
                 v2v_count += 1
 
+            if row['y'] > 8:
+                row['y'] = row['y'] -4 -3.2*2
+            else:
+                row['y'] = row['y'] - 3.2 * 3
+
             vehicles.append({
                 'id': row['id'],
                 'x': row['x'],
@@ -207,6 +212,7 @@ class HighwayVisualizer:
         # Center position in screen coords
         cx = self._mx_to_px(x_m)
         cy = self._my_to_py(y_m)
+        # cy = self._my_to_py(y_m - self.road_width_m/2)
         rect = rotated_surf.get_rect(center=(cx, cy))
 
         self.screen.blit(rotated_surf, rect)

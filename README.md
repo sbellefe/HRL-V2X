@@ -1,4 +1,4 @@
-# Hierarchical RL
+# Hierarchical RL - V2X Experiment
 
 Implementation and benchmarking of multi-agent HRL algorithms in V2X environments. Compares OC and DAC to MAPPO.
 
@@ -16,13 +16,13 @@ e.g ```python main.py --env SIG --algo ippo```
 Choose from the following options in the command line:
 - ```NFIG```: single timestep game with channel awareness
 - ```SIG```: multi timestep game with channel and queue awareness
-- ```POSIG```: same as ```SIG``` but with partial observability (i.e. no access to global state)
+- ```POSIG```: same as ```SIG``` but with partial observability (i.e. agents don't see global state)
 
 Additional game mode configurations (set by changing attributes of util/parameters/```SharedParams``` class):
 - multi-location (mloc) vs. single location (sloc): ```self.multi_location``` (bool)
 - fast-fading (ff) vs. no fast-fading (nff): ```self.fast_fading``` (bool)
 - positional data time index to use for sloc: ```self.single_loc_idx``` (e.g. 25.0)
-- positional data time indices to use for mloc: ```self.multi_loc_idx``` (e.g. \[35, 45])
+- positional data time indices reserved for testing in mloc: ```self.multi_loc_test_idx``` (e.g. range\[20, 30])
 
 env/SUMOData: Contains positional vehicle data in .csv files obtained from simulation.
 
@@ -38,8 +38,6 @@ benchmarker.py: Compute evaluation metrics, plot training and testing results.
 parameters.py: 
 - Shared hyperparameter class ```SharedParams``` used for additional environment configuration and high-level train/test loop structure.
 - Hyperparameter classes for each algorithm inherit from ```SharedParams```. Used for algorithm specific hyperparameters.
-
-
 
 ## agent: 
 mappo.py: Contains ```MAPPOActor``` and ```MAPPOCritic``` classes.
