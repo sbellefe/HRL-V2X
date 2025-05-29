@@ -3,9 +3,6 @@ import numpy as np
 import matplotlib.pyplot as plt
 import sys
 
-def pre_process(obs):   #NOT USED
-    state = th.FloatTensor(obs).unsqueeze(0)
-    return state
 
 class RolloutBuffer:
     def __init__(self, params):
@@ -20,7 +17,7 @@ class RolloutBuffer:
         self.state_dim = params.state_dim
         self.obs_dim = params.obs_dim
         self.action_dim = params.action_dim
-        self.plot = True
+        self.plot = False
 
         # Flat lists of transitions for the entire batch (length = batch_size * t_max)
         self.global_state = []
@@ -52,7 +49,7 @@ class RolloutBuffer:
              observations=None, fp_global_states=None, prev_actions=None):
         """Add one timestep transition to the buffer. Transition variable shapes: (N = num_agents)
             **Communal**
-            1.  joint_action: tensor, shape [N]
+            1.  joint_action: tensor, shape [N]  (integer actions)
             2.  global_reward: float
             3.  logps: tensor, shape [N]
 
@@ -79,6 +76,8 @@ class RolloutBuffer:
         else:
             self.global_state.append(global_state)
 
+        # print(f"Episode {self.n_eps}, t={self.t_steps}. || V={values} || R={global_reward}")
+
         self.t_steps += 1
         self.t_tot += 1
 
@@ -87,6 +86,13 @@ class RolloutBuffer:
             for the last t_steps transitions"""
 
         T = self.t_steps
+
+
+        # print(f"\n***Episode {self.n_eps} Complete***")
+              # f"Values: {self.values[-T:]} \n"
+              # f"Global Rewards: {self.global_reward[-T:]} \n")
+        # for t in range(T):
+        #     print(f"step {t}: V={self.values[-t]} | R={self.global_reward[-t]}")
 
         # stack rewards & values
         rewards = th.tensor(self.global_reward[-T:], dtype=th.float32, device=self.device)  # [T]
@@ -167,9 +173,14 @@ class RolloutBuffer:
             adv = (adv - adv.mean()) / adv.std()
             advantages = adv.view(B, T, N)
 
+            rets = returns.flatten()
+            rets = (rets - rets.mean()) / rets.std()
+            returns = rets.view(B, T)
 
             # dataset of full episodes
             dataset = th.utils.data.TensorDataset(actions, obs, fpgs, prev, logps, values, returns, advantages)
+
+
         else:
             # SIG: flatten across all time-steps [B*T, ...]
             states = th.stack(self.global_state, dim=0)  # [B*T, state_dim]
@@ -313,123 +324,6 @@ class RolloutBuffer:
         plt.tight_layout(rect=(0, 0, 1, 0.96))  # leave space for suptitle
         fig.subplots_adjust(bottom=0.08)
         plt.show()
-
-                    # # 3) Actions as scatter
-                    # ax = axes[3]
-                    # ax.set_ylabel("Agent → Action")
-                    # # meta-parameters
-                    # P = self.num_power_levels
-                    # power_list = self.V2V_power_dB_list
-                    # null_action = self.action_dim - 1
-                    # # flatten for scatter
-                    # times = np.repeat(time, N)
-                    # agents = np.tile(np.arange(N), B*T)
-                    # acts = actions_series.flatten()
-                    # # compute channel & power index arrays
-                    # sc = (acts // P)
-                    # pw_idx = (acts % P)
-                    #
-                    # # choose a distinct marker per power‐level
-                    # markers = ['o', 's', '^', 'D', 'v'][:P]  # extend if P>4
-                    # # scatter each (channel, power) combination
-                    # for ch in np.unique(sc[sc >= 0]):
-                    #     for pi, pw in enumerate(power_list):
-                    #         mask = (sc == ch) & (pw_idx == pi)
-                    #         if not mask.any(): continue
-                    #         ax.scatter(
-                    #             times[mask],
-                    #             agents[mask],
-                    #             c=[f"C{ch}"],  # one color per channel
-                    #             marker=markers[pi],  # shape per power
-                    #             s=20,
-                    #             label=f"ch{ch}, {pw}dB"
-                    #         )
-                    # # null‐action
-                    # null_mask = (acts == null_action)
-                    # if null_mask.any():
-                    #     ax.scatter(
-                    #         times[null_mask],
-                    #         agents[null_mask],
-                    #         c='lightgray',
-                    #         marker='x',
-                    #         s=20,
-                    #         label="no-transmit"
-                    #     )
-                    #
-                    # ax.set_yticks(np.arange(N))
-                    # ax.set_yticklabels([f"{i}" for i in range(N)])
-                    # ax.legend(fontsize='small', ncol=4, loc='upper right')
-
-        # (batch_states, batch_actions, batch_pi_hat,
-        #  batch_options, batch_prev_options,
-        #  batch_v_h, batch_v_l, batch_logp_h, batch_logp_l,
-        #  batch_rtrn, batch_adv_h, batch_adv_l, batch_pi_bar, batch_betas) = processed_buffer
-        #
-        # fig, axes = plt.subplots(3, 3, figsize=(15, 12))
-        # fig.suptitle(f"Buffer {self.counter} Data Visualization")#, fontsize=16)
-        #
-        # # High-Level Policy Distribution (pi_hat) - Show average probability per option
-        # avg_pi_hat = batch_pi_hat.mean(dim=0).cpu().numpy()
-        # axes[0, 0].bar(range(len(avg_pi_hat)), avg_pi_hat, color='blue')
-        # axes[0, 0].set_title("High-Level Policy Distribution (pi_hat)")
-        # axes[0, 0].set_xlabel("Option Index")
-        # axes[0, 0].set_ylabel("Avg Probability")
-        #
-        # # Log Prob of Selected Options (logp_h), Actions (logp_l)
-        # axes[0, 1].hist(batch_logp_h.cpu().numpy(), bins=30, color='red', alpha=0.5, label="Selected Options (logp_h)")
-        # axes[0, 1].hist(batch_logp_l.cpu().numpy(), bins=30, color='blue', alpha=0.5, label="Selected Actions (logp_l)")
-        # axes[0, 1].set_title("Log Probability of")
-        # axes[0, 1].set_xlabel("Log Probability")
-        # axes[0, 1].set_ylabel("Frequency")
-        # axes[0,1].legend()
-        #
-        # #Plot option Terminations: batch_betas [batch_size, 4]
-        # for i in range(batch_betas.shape[1]):
-        #     axes[0, 2].plot(range(len(batch_betas)), batch_betas[:, i].cpu().numpy(),label=f"Option {i}", alpha=0.7,  linestyle='dotted')
-        # axes[0, 2].set_title("Option Termination Probabilities (betas)")
-        # axes[0, 2].set_ylabel("Termination Probability")
-        # axes[0, 2].set_xlabel("Buffer Index")
-        # axes[0, 2].legend()
-        #
-        # # High-Level Advantage Estimates (Adv_H)
-        # axes[1, 0].plot(batch_adv_h.cpu().numpy(), color='blue')
-        # axes[1, 0].set_title("High MDP Advantage Estimates (Adv_H)")
-        # axes[1, 0].set_xlabel("Buffer index")
-        # axes[1, 0].set_ylabel("Advantage Value")
-        #
-        # # Low-Level Advantage Estimates (Adv_L)
-        # axes[1, 1].plot(batch_adv_l.cpu().numpy(), color='green')
-        # axes[1, 1].set_title("Low MDP Advantage Estimates (Adv_L)")
-        # axes[1, 1].set_xlabel("Buffer index")
-        # axes[1, 1].set_ylabel("Advantage Value")
-        #
-        # # Discounted Returns (batch_rtrn)
-        # axes[1, 2].plot(batch_rtrn.cpu().numpy(), color='orange')
-        # axes[1, 2].set_title("Discounted Returns")
-        # axes[1, 2].set_xlabel("Buffer index")
-        # axes[1, 2].set_ylabel("Return Value")
-        #
-        # # High-Level Value Function Estimates (V_H)
-        # axes[2, 0].plot(batch_v_h.cpu().numpy(), color='purple')
-        # axes[2, 0].set_title("High-Level Value Function Estimates (V_H)")
-        # axes[2, 0].set_xlabel("Buffer index")
-        # axes[2, 0].set_ylabel("Value")
-        #
-        # # Low-Level Value Function Estimates (V_L)
-        # axes[2, 1].plot(batch_v_l.cpu().numpy(), color='brown')
-        # axes[2, 1].set_title("Low-Level Value Function Estimates (V_L)")
-        # axes[2, 1].set_xlabel("Buffer index")
-        # axes[2, 1].set_ylabel("Value")
-        #
-        # axes[2, 2].scatter(range(len(batch_options)), batch_options.cpu().numpy(), label="Current Option", alpha=0.7, s=50)
-        # axes[2, 2].scatter(range(len(batch_prev_options)), batch_prev_options.cpu().numpy(),label="Previous Option", alpha=0.5, s=4)
-        # axes[2, 2].set_title("Option Switching Behavior")
-        # axes[2, 2].set_xlabel("Buffer Index")
-        # axes[2, 2].set_ylabel("Option Index")
-        # axes[2, 2].legend()
-        #
-        # plt.tight_layout(rect=(0., 0., 1., 0.97))
-        # plt.show()
 
 
 

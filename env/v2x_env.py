@@ -389,7 +389,7 @@ class V2XEnvironment:
 
         # Reset and update queues and AoI as per control episode requirements.
         if self.game_mode != 1:
-            self.queue = np.ones((self.num_agents))
+            self.queue = np.ones(self.num_agents)
             # self.queue = np.ones((self.num_agents, self.n_neighbor))
         if self.game_mode in [4, 5]:
             self.AoI = np.ones((self.num_agents, self.n_neighbor))

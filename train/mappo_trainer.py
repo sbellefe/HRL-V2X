@@ -9,6 +9,8 @@ from torch.nn import functional as F
 from Agent.mappo import MAPPO_Actor, MAPPO_Critic
 from helpers.mappo_helper import RolloutBuffer
 
+plot_step_data = False
+
 
 class MAPPOtrainer:
     def __init__(self):
@@ -30,7 +32,7 @@ class MAPPOtrainer:
 
         for it in range(params.train_iterations):
             for ep in range(params.buffer_episodes):
-
+                if plot_step_data: print(f"\n\n-----------Starting Episode {n_ep}!!!!")
                 if params.partial_observability:    #Initialize first timestep RNN hidden states to zero
                     #shape list(len(num_agents). for each agent, shape = (timestep, batch episode, hidden dim)
                     hidden_states_actor = [th.zeros(1, 1, params.actor_hidden_dim[0]).to(device) for _ in range(params.num_agents)]
@@ -116,7 +118,7 @@ class MAPPOtrainer:
                                 with th.no_grad():
                                     value, h_c = central_critic(x, hidden_states_critic[a])
                                 hidden_states_critic[a] = h_c  # Overwrite previous hidden state
-                                values.append(value)
+                                values.append(value.squeeze())
 
                             # values = th.stack(values).squeeze(-1)   # shape [N, 1]
 
@@ -152,7 +154,7 @@ class MAPPOtrainer:
                                 "logps": th.stack(logps).squeeze(),   # shape[N]
                                 "values": values.squeeze(-1), #shape [1]
                             }
-
+                        if plot_step_data: print(f"step {t} complete. || V={transition['values']} || R={global_reward:.3f}")
                         buffer.push(**transition)
 
                         total_reward += global_reward
@@ -180,7 +182,7 @@ class MAPPOtrainer:
                                     x = th.cat([fp_global_states[a], prev_joint_action, agent_id], dim=-1).unsqueeze(0)
                                     with th.no_grad():
                                         value, _ = central_critic(x, hidden_states_critic[a])
-                                    values.append(value)
+                                    values.append(value.squeeze())
                                 final_values = th.stack(values).squeeze()  # shape [N]
                                 # final_values = th.stack(values).squeeze(-1)  # shape [N, 1]
                             else:
@@ -195,14 +197,20 @@ class MAPPOtrainer:
                             # print(f"Training Episode {n_ep+1} complete. t0 = {t0}. R = {total_reward:.2f}")
                             break
 
+                if plot_step_data:
+                    t += 1
+                    print(f"-------Episode {n_ep} Complete!!! steps={t} || R_tot={total_reward:.3f} || From Buffer:")
+                    vals = buffer.values[-t:]; rews = buffer.global_reward[-t:]
+                    for z in range(t):
+                        print(f"step {z}: V={vals[z]} | R={rews[z]:.3f}")
 
                 n_ep += 1
                 train_rewards.append(total_reward)
 
-
-                p = 100
-                if n_ep % p == 0:
-                    print(f"n_ep={n_ep}. Training Return Running average over last {p} eps: {np.mean(train_rewards[-p:]):.3f}")
+                """FOR DEBUGGING"""
+                # p = 100
+                # if n_ep % p == 0:
+                #     print(f"----Episode {n_ep} Complete. Training Return Running Average ({p} eps): {np.mean(train_rewards[-p:]):.3f}")
 
                 # test at interval and print result
                 if n_ep % params.test_interval == 0:
@@ -221,7 +229,7 @@ class MAPPOtrainer:
                     # plt.draw()
                     # plt.pause(1)
 
-                    print(f'Trial {trial}. Test return at episode {n_ep}: {test_reward:.3f}. Average train return: {np.mean(train_rewards[-params.test_interval:]):.3f}')
+                    print(f'Trial {trial+1}. Test return at episode {n_ep}: {test_reward:.3f}. Average train return: {np.mean(train_rewards[-params.test_interval:]):.3f}')
 
             # process buffer once full
             dataloader = buffer.process_batch()
@@ -267,12 +275,14 @@ class MAPPOtrainer:
 
 
                 MB, T, N, action_dim  = prev_actions_mb.shape
-                #initialize first hidden state TODO why is MB 2nd index when we have batch_first=True?
+                #initialize first hidden states for each sequence (full episode) to zero  TODO why is MB 2nd index when we have batch_first=True?
                 hidden_states_actor = [th.zeros(1, MB, params.actor_hidden_dim[0]).to(device) for _ in range(params.num_agents)]
                 hidden_states_critic = [th.zeros(1, MB, params.critic_hidden_dim[0]).to(device) for _ in range(params.num_agents)]
 
                 #Reshape prev action one-hot to create joint action one-hot
                 prev_joint_actions_mb = prev_actions_mb.view(MB, T, N * action_dim)
+
+
 
                 # critic update
                 critic_opt.zero_grad()
@@ -282,11 +292,19 @@ class MAPPOtrainer:
                     x = th.cat([fpgs_mb[:,:,a,:], prev_joint_actions_mb, agent_id], dim=-1)
                     values_new, _ = critic(x, hidden_states_critic[a])
                     values_new = values_new.squeeze(-1)
+                    # print('Random x sample:', x[0, 8, :])
+                    # print('Episode 0 critic values:', values_new[0, :])
+                    # print('Episode 0 targets:', rtrns_mb[0, :])
 
                     critic_loss = critic.critic_loss(values_new, values_mb[:,:, a], rtrns_mb, params.eps_clip)
                     total_critic_loss += critic_loss
                 total_critic_loss /= params.num_agents
                 total_critic_loss.backward()
+
+                # for n, p in critic.named_parameters():      #TODO!!!!!!!!!!!!!!s
+                #     if p.grad is not None:
+                #         print(f"{n}: mean grad={p.grad.abs().mean().item()}")
+
                 critic_opt.step()
 
                 # actor update
@@ -358,7 +376,7 @@ class MAPPOtrainer:
     def test(actor, params, env):
         device = params.device
         env.testing_mode = True
-        actor.flatten_parameters()
+        # actor.flatten_parameters()
         actor.train(mode=True)
 
         test_rewards = np.zeros(params.test_episodes)

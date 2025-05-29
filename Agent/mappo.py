@@ -109,15 +109,15 @@ class MAPPO_Critic(nn.Module):
           returns logits [batch, action_dim]
 
         Partially observable GRU: forward(x, hidden_state)
-          - x:            [batch, obs_dim + action_dim + num_agents]
+          - x:            [batch, fpgs_dim + num_agents*action_dim + num_agents]
           - hidden_state: [1, batch, hidden[1]]
-          returns (logits [batch, action_dim], new_hidden [1, batch, hidden[1]])
+          returns (logits [batch, 1], new_hidden [1, batch, hidden[1]])
         """
         if self.partial:
             x, h = args
             x = th.tanh(self.fc_in(x))
             x, h_new = self.gru(x, h)
-            value = self.fc_out(x).squeeze(1)
+            value = self.fc_out(x)
             return value, h_new
         else:
             x, = args
@@ -128,9 +128,13 @@ class MAPPO_Critic(nn.Module):
 
 
     def critic_loss(self, new_values, old_values, returns, eps_clip):
-        # value_clip = old_values + th.clamp(values - old_values, -eps_clip, eps_clip)
-        value_clip = th.clamp(new_values, old_values - eps_clip, old_values + eps_clip)
+        value_clip = old_values + th.clamp(new_values - old_values, -eps_clip, eps_clip)
+        # value_clip = th.clamp(new_values, old_values - eps_clip, old_values + eps_clip)
+
+        # print(f"\n\nNew values: {new_values}\n\nOld values: {old_values}\n\nReturns: {returns}\n\n")
+
         loss_unclipped = (new_values - returns).pow(2)
         loss_clipped = (value_clip - returns).pow(2)
         loss = th.max(loss_unclipped, loss_clipped).mean()
+        # loss = (new_values - returns).pow(2).mean()
         return loss
