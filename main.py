@@ -1,8 +1,8 @@
-import argparse, time, sys
+import argparse, time, os, sys
+from datetime import datetime
 import pandas as pd
 
 from env.v2x_env import V2XEnvironment
-from env.env_helper import sample_veh_positions, remove_test_data_from_veh_pos
 
 # Import runner, trainers, and parameters classes here
 from runner.runner import ALGO_Runner
@@ -34,8 +34,7 @@ def main():
 
     """Create environment"""
     #load position data from .csv
-    veh_pos_data = pd.read_csv('env/SUMOData/calibration.csv')
-    # veh_pos_data = pd.read_csv('env/SUMOData/4ag_4V2I.csv')
+    veh_pos_data = pd.read_csv(params.veh_data_dir)
     # print("Raw pd.read_csv:",veh_pos_data)
 
     #Determine game_mode and PO boolean
@@ -84,7 +83,28 @@ def main():
     params.action_dim = env.action_dim
     params.partial_observability = partial_observability
 
-    #define runner and run experiment
+    """Build run directory // store params"""
+    runs_root = os.path.join(os.getcwd(), "runs")
+    os.makedirs(runs_root, exist_ok=True)
+
+    # ts = datetime.now().strftime("%Y-%m-%d_%I.%M%p")  # e.g. "2025-06-09_12:34PM"
+    ts = datetime.now().strftime("%Y-%m-%d_%H.%M")  # e.g. "2025-06-09_14.34"
+    algo_str = args.algo.upper()
+    env_str = args.env
+    ff_str = "FF" if params.fast_fading else "NFF"
+    run_dir = os.path.join(runs_root, f"{ts}_{algo_str}_{env_str}_{ff_str}")
+
+    os.makedirs(run_dir, exist_ok=True)
+    params.run_dir = run_dir
+
+    info_path = os.path.join(run_dir, "info.txt")
+    with open(info_path, "w") as f:
+        f.write("Hyperparameters:\n")
+        for k, v in vars(params).items():
+            f.write(f"  - {k}: {v}\n")
+
+
+    """define runner and run experiment"""
     runner = ALGO_Runner(env, trainer)
     runner.run_experiment(params)
 

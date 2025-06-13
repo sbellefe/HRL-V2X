@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 from env.env_helper import sample_veh_positions, remove_test_data_from_veh_pos
 from env.render import HighwayVisualizer
 
-
+import sys, os
 
 
 class Vehicle:
@@ -37,6 +37,7 @@ class V2XEnvironment:
         if self.render_control_interval:
             self.visualizer = HighwayVisualizer()
 
+
         """local env parameters"""
         self.n_neighbor = 1  # number of neighboring vehicles need to receive CAM
         #Radio transmission related
@@ -47,14 +48,15 @@ class V2XEnvironment:
         self.sig2 = 10 ** (-114 / 10)   #-114dB power level of AWGN noise
         self.h_bs = 25.0                 # height of base station antenna [m]
         self.h_ms = 1.5                 # height of mobile station (vehicle) antenna [m]
-        self.eNB_xy = [500, -35]        # position of base station
+        # self.eNB_xy = [500, -35]        # position of base station (callibration)
+        self.eNB_xy = [0, -35]        # position of base station (journal 4 4)
         # self.eNB_xy = [500, -43]        # position of base station
         self.veh_ant_gain = 3           # Vehicle antenna gain
         self.veh_noise_figure = 9       # Vehicle noise figure
         self.bs_ant_gain = 8            # Base station antenna gain
         self.bs_noise_figure = 5        # Base station noise figure
         self.norm_V2V_channel_factor = 120  # Normalization factor for V2V channel
-        self.d_bp = 4 * (self.h_bs-1) * (self.h_ms-1) * self.fc / 3e8   #V2V breakpoint distance
+        self.d_bp = 4 * (self.h_ms-1) * (self.h_ms-1) * self.fc / 3e8   #V2V breakpoint distance
 
         #Reward constants no AoI (gamemodes 2,4)
         self.lambda1 = 0.01  # reward weight for V2V_SE term, if queue != empty
@@ -166,6 +168,10 @@ class V2XEnvironment:
         sampled_veh_pos = sample_veh_positions(veh_pos_data, t0=self.single_loc_idx)  # use sloc sample for vehicle init
         self.initialize_vehicles(sampled_veh_pos)
 
+        """DEBUGGING"""
+        self.debug = False
+        self.n_ep = 0
+
 
     def initialize_vehicles(self, sampled_data):
         """Initialize vehicles given position data sample. Called in
@@ -216,7 +222,8 @@ class V2XEnvironment:
 
 
     def update_vehicle_positions(self, sampled_veh_pos_data):
-        """Updates V2V and V2I vehicle objects in one pass using a dict lookup"""
+        """Updates V2V and V2I vehicle objects in one pass using a dict lookup
+            Usage in: env.reset() and env.reset_control()"""
         # iterate with itertuples for a small speed boost over iterrows
         for row in sampled_veh_pos_data.itertuples(index=False):
             # row.id, row.x, row.y, row.speed
@@ -225,7 +232,7 @@ class V2XEnvironment:
                 veh.position = [row.x, row.y]
                 veh.velocity = row.speed
 
-    def reset(self):
+    def reset(self, test_idx=None):
         """Create a new random game by reloading vehicle positions, reinitializing channels,
             queues, active links, and AoI values.
             Re-sample vehicle data based on the game mode:
@@ -239,16 +246,25 @@ class V2XEnvironment:
             if self.testing_mode is False:  # Training mode
                 sampled_data = sample_veh_positions(self.veh_pos_data, k_max=self.k_max)
             else:                           #Testing Mode
-                t0 = np.random.choice(len(self.test_data_list))
+                if test_idx is None:    #Select test data at random
+                    t0 = np.random.choice(len(self.test_data_list))
+                else:   # loop through test indices in order
+                    t0 = test_idx % len(self.test_data_list)
                 sampled_data = self.test_data_list[t0]
 
             #STORE episode and current positional data samples
             self.episode_veh_positions = sampled_data
-            first_timestep = sampled_data['time'].unique()[0]  # Get the first unique time index
-            self.current_veh_positions = sampled_data[sampled_data['time'] == first_timestep]
+            t0 = sampled_data['time'].unique()[0]  # Get the first unique time index
+            self.current_veh_positions = sampled_data[sampled_data['time'] == t0]
 
             #UPDATE vehicle positions
             self.update_vehicle_positions(self.current_veh_positions)
+
+            #DEBUG
+            if self.debug:
+                MODE = "TESTING" if self.testing_mode else "TRAINING"
+                print(f"\n-----------Starting Episode {self.n_ep}!!!! ({MODE}) t_idx: {t0}")
+
 
         """Update channels and other environment parameters"""
         self.renew_channels()   #Compute slow- and fast-fading pathlosses
@@ -265,6 +281,10 @@ class V2XEnvironment:
         """rendering of positional data and pathloss info"""
         if self.render_control_interval:
             self.render()
+
+        # print(f"\n-----------Starting Episode {self.n_ep}!!!! t_idx: {t0}")
+        # print('GS = ', np.round(global_state[0,:], decimals=2))
+        # print("V2I positions", [veh.position for veh in self.vehicles_V2I])
 
         return global_state, local_states, fp_global_states
 
@@ -297,8 +317,17 @@ class V2XEnvironment:
                 (TEMPORARY) individual reward: list(float) length(num_agents)
                 done: bool """
 
+        # Convert action to RRA, Unpack action tuples into arrays
+        RRA_all_agents = [self.action2RRA[a] for a in raw_actions]
+        channel_sel = np.array([sc for sc, _ in RRA_all_agents], dtype='int32')  # (num_agents,)
+        power_sel = np.array([pw for _, pw in RRA_all_agents], dtype='int32')  # (num_agents,)
+
+        # """DEBUGGING - hardset all actions"""
+        # channel_sel = np.array([0, 1, 2, 3], dtype='int32')  # (num_agents,)
+        # power_sel = np.array([23 for _ in range(self.num_agents)], dtype='int32')  # (num_agents,)
+
         # --- Compute Performance Metrics ---
-        global_reward, individual_rewards, queue = self.compute_reward(raw_actions)
+        global_reward, individual_rewards, queue = self.compute_reward(channel_sel, power_sel)
 
         # --- Update Environment State ---
         self.queue = queue
@@ -312,14 +341,32 @@ class V2XEnvironment:
         #---- Get next state ----
         global_next_state, local_next_states, fp_global_next_states = self.get_state(t_step=t)
 
-        # print(f"**step: {t} | "
-        #       f"global_reward = {global_reward:.2f} | "
-        #       f"individual_rewards = {np.round(individual_rewards, decimals=2)} | "
-        #       f"queue = {np.round(self.queue, decimals=2)}")
+        if self.debug:
+            PLji = np.round(self.gs['gji'], decimals=2)
+            PLBi = np.round(self.gs['gBi'], decimals=2)
+            print(f"**step: {t} | " 
+                  f"Channel selection: {[int(c) for c in channel_sel]} | "
+                  f"Power selection: {[int(p) for p in power_sel]} | "
+                  f"global_reward = {global_reward:.2f} | "
+                  f"individual_rewards = {np.round(individual_rewards, decimals=2)} | "
+                  f"queue = {np.round(self.queue, decimals=2)} | "
+                  )
+
+
+        # #CHECKING SEs
+        # print(f't = {t}. '
+        #       f'sc_sel: {channel_sel} | '
+        #       f'pw_sel: {power_sel} | '
+        #       f'V2V_SE: {np.round(self.V2V_SE, decimals=2)} | '
+        #       f'V2I_SE: {np.round(self.V2I_SE, decimals=2)} | '
+        #       f'q: {np.round(self.queue, decimals=2)}')
 
         if done:
             t0 = self.current_veh_positions['time'].unique()[0]
-            # print(f"DONE. Testing = {self.testing_mode}. t0 = {t0}. R = {self.episode_rewards:.2f}")
+            # print(f"------Episode {self.n_ep} Complete! t0 = {t0} | R_tot = {self.episode_rewards:.2f}")
+            # if self.debug:  #IN TRAIING LOOP NOW
+            #     print(f"------Episode {self.n_ep} Complete! R_tot = {self.episode_rewards:.2f}")
+            if not self.testing_mode: self.n_ep += 1
 
         #TODO: Remove individal_rewards, should only use global....
         return global_next_state, local_next_states, fp_global_next_states, global_reward, individual_rewards, done
@@ -432,12 +479,13 @@ class V2XEnvironment:
 
 
         """G_ji: V2V interference channel gain for each pair of different agents (all gamemodes)"""
+        #TODO FIx 2d version!!!!
         G_ji = []   #dim= [num_agents * (num_agents - 1)]
         G_ji_2d = []   #dim= [num_agents, (num_agents - 1)] (for easy slicing)
-        for i in range(N):        #loop for all V2V senders i
+        for i in range(N):        #loop for agents i to get receiving V2V pair
             agent_idx = self.agent2veh[i]
             receiver_idx = self.vehicles_V2V[agent_idx].destinations[idx[1]]
-            G_j = []    # store each agent seperately
+            G_j = []    #store intf at each agent receiver seperately
             for j in range(N):    #loop for all other V2V senders
                 if i == j: continue
                 sender_idx = self.agent2veh[j]
@@ -455,7 +503,7 @@ class V2XEnvironment:
         for i in range(N):
             agent_idx = self.agent2veh[i]
             receiver_idx = self.vehicles_V2V[agent_idx].destinations[idx[1]]
-            G_B = []    #store each agent seperately
+            G_B = []    #store intf at each agent receiver seperately
             for m in range(self.num_SC):
                 sender_idx = m
                 gain = norm_gain(self.pathlosses_tot['V2I_V2V'][sender_idx, receiver_idx])
@@ -493,13 +541,25 @@ class V2XEnvironment:
             global_state = np.hstack((G_i, G_ji, G_m, G_Bi, G_iB))
         elif self.game_mode in [2, 4]: #SIG or POSIG noAoI
             global_state = np.hstack((t, G_i, G_ji, G_m, G_Bi, G_iB, q_i))
-        elif self.game_mode in [3, 4]: #SIG or POSIG AoI
+        elif self.game_mode in [3, 5]: #SIG or POSIG AoI
             global_state = np.hstack((t, G_i, G_ji, G_m, G_Bi, G_iB, q_i, AoI))
         else: raise ValueError("Invalid game mode")
         global_state = global_state.reshape((1, self.state_dim))
 
         local_states = None
         fp_global_states = None
+
+        """Build GS dictionary (SIG only for now)"""
+        # self.gs = {
+        #     't': np.array(t),  # shape (t_max,)
+        #     'gi': np.array(G_i),  # shape (N,)
+        #     'gji': np.array(G_ji_2d),  # shape (N, N-1)
+        #     'gm':  np.array(G_m),  # shape (M,)
+        #     'gBi': np.array(G_Bi_2d),  # shape (N, M)
+        #     'giB': np.array(G_iB),  # shape (N,)
+        #     'qi': np.array(q_i),  # shape (N,)
+        # }
+
 
         """Get Observations: Create dictionary of local states,
            Get Feature-pruned (FP) agent-specific global states: dictionary """
@@ -552,13 +612,13 @@ class V2XEnvironment:
         return global_state, local_states, fp_global_states
 
 
-    def compute_reward(self, raw_actions):
+    def compute_reward(self, channel_sel, power_sel):
         """
         Compute V2V and V2I spectral efficiencies, update the message queue,
         and determine individual and global reward based on game_mode.
         Stores attributes for debugging purposes:
             individual_rewards: list
-            spectral_efficiencies: 2 variables (V2V_SE and V2I_SE)
+            spectral_efficiencies: 2 variables (V2V_SE and V2I_SE) Units [bits/s/Hz]
             interferences: dictionary
             signals: dictionary
         Args:
@@ -571,25 +631,24 @@ class V2XEnvironment:
             """
 
         # Convert action to RRA, Unpack action tuples into arrays
-        RRA_all_agents = [self.action2RRA[a] for a in raw_actions]
-        channel_sel = np.array([sc for sc, _ in RRA_all_agents], dtype='int32')   # (num_agents,)
-        power_sel =  np.array([pw for _, pw in RRA_all_agents], dtype='int32')  # (num_agents,)
+        # RRA_all_agents = [self.action2RRA[a] for a in raw_actions]
+        # channel_sel = np.array([sc for sc, _ in RRA_all_agents], dtype='int32')   # (num_agents,)
+        # power_sel =  np.array([pw for _, pw in RRA_all_agents], dtype='int32')  # (num_agents,)
+
+        # if self.debug:
+        #     print(f"Channel selection: {[int(c) for c in channel_sel]}. Power selection: {[int(p) for p in power_sel]}")
 
         #Initialize / reset interferences + signals to 0
         interferences = {
-            'V2V_V2I': np.zeros(self.num_SC),
-            'V2I_V2V': np.zeros(self.num_agents),
-            'V2V_V2V': np.zeros(self.num_agents),
-            'V2V_tot': np.zeros(self.num_agents),
+            'V2V_V2I': np.zeros(self.num_SC),       # Interference on each V2I subchannel from V2V transmitters
+            'V2I_V2V': np.zeros(self.num_agents),   # Interference on each V2V link from the V2I base‐station transmitter
+            'V2V_V2V': np.zeros(self.num_agents),   # Mutual V2V interference (other V2V agents) on each V2V link
+            'V2V_tot': np.zeros(self.num_agents),   # Total noise + interference for each V2V link
         }
         signals = {
-            'V2I': np.zeros(self.num_SC),
-            'V2V': np.zeros(self.num_agents),
+            'V2I': np.zeros(self.num_SC),       # Received V2I signal power (linear) per subchannel
+            'V2V': np.zeros(self.num_agents),   # Received V2V signal power (linear) per transmitter
         }
-
-        # print(f"SCs: {channel_sel}\n"
-        #       f"PwL: {power_sel}\n"
-        #       f"RRA: {RRA_all_agents}")
 
         """Compute V2I link spectral efficiencies """
         #first compute interference from V2V transmitters on each V2I channel
@@ -637,9 +696,6 @@ class V2XEnvironment:
                 interferences['V2V_V2V'][i] += 10 ** ((power_sel[j] - self.pathlosses_tot['V2V_V2V'][path]
                                             + 2 * self.veh_ant_gain - self.veh_noise_figure) / 10)
 
-            # for k, v in interferences.items():
-            #     print(f"{k}: {v.shape}")
-
             interferences['V2V_tot'][i] = self.sig2 + interferences['V2I_V2V'][i] + interferences['V2V_V2V'][i]
 
             V2V_SE[i] = np.log2(1 + signals['V2V'][i] / interferences['V2V_tot'][i])
@@ -672,6 +728,9 @@ class V2XEnvironment:
         self.signals = signals
         self.V2V_SE, self.V2I_SE = V2V_SE, V2I_SE
 
+        if self.debug:
+            print(f'V2V_SE: {np.round(self.V2V_SE, decimals=3)} | V2I_SE: {np.round(self.V2I_SE, decimals=3)}')
+
         return global_reward, individual_rewards, queue
 
 
@@ -687,7 +746,7 @@ class V2XEnvironment:
         def PL_LoS(d):
             """line-of-sight (LoS) path loss function"""
             if d <= 3:      #minimum case is 3m
-                return 22.7 * np.log10(d) + 41 + 20 * np.log10(self.fc / 5e9) #fc=2e9
+                return 22.7 * np.log10(3) + 41 + 20 * np.log10(self.fc / 5e9) #fc=2e9
             else:
                 if d < self.d_bp:
                     return 22.7 * np.log10(d) + 41 + 20 * np.log10(self.fc / 5e9)

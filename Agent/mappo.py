@@ -16,14 +16,14 @@ class MAPPO_Actor(nn.Module):
         #hidden layer determination
         if not self.partial:
             input_dim = params.state_dim + params.num_agents
+            self.fc_in = nn.Linear(input_dim, hidden[0])  # input layer
             self.fc2 = nn.Linear(hidden[0], hidden[1])
+            self.fc_out = nn.Linear(hidden[1], self.output_dim)
         else:
             input_dim = params.obs_dim + params.action_dim + params.num_agents
+            self.fc_in = nn.Linear(input_dim, hidden[0])  # input layer
             self.gru = nn.GRU(hidden[0], hidden[1], batch_first=True)
-
-        #common input and output layers
-        self.fc_in = nn.Linear(input_dim, hidden[0])    #input layer
-        self.fc_out = nn.Linear(hidden[1], self.output_dim)
+            self.fc_out = nn.Linear(hidden[1], self.output_dim)
 
         self.initialize_weights()
 
@@ -35,40 +35,30 @@ class MAPPO_Actor(nn.Module):
 
 
     def forward(self, *args):
-        """Fully observable: forward(state, agent_id)
-          - state:  [batch, state_dim]
-          - agent_id: [batch, num_agents]
-          returns logits [batch, action_dim]
-
-        Partially observable GRU: forward(x, hidden_state)
-          - x:            [batch, obs_dim + action_dim + num_agents]
-          - hidden_state: [1, batch, hidden[1]]
-          returns (logits [batch, action_dim], new_hidden [1, batch, hidden[1]])
-        """
-        if self.partial:
-            x, h = args
-            x = th.tanh(self.fc_in(x))
-            x, h_new = self.gru(x, h)   #x: [batch, seq, hidden]
-            logits = self.fc_out(x)     #h_new: [1, batch, hidden]
-            return logits, h_new
-        else:
+        if not self.partial:
             x, = args
             x = th.tanh(self.fc_in(x))
             x = th.tanh(self.fc2(x))
             logits = self.fc_out(x)
             return logits
+        else:
+            x, h = args
+            x = th.tanh(self.fc_in(x))
+            x, h_new = self.gru(x, h)   #x: [batch, seq, hidden]
+            logits = self.fc_out(x)     #h_new: [1, batch, hidden]
+            return logits, h_new
+
 
     @staticmethod
     def select_action(logits):
         action_dist = Categorical(logits=logits)
         action = action_dist.sample()
-        # print(action.shape)
         logp = action_dist.log_prob(action)
         return action, logp #, action_dist
 
-    def actor_loss(self, logp, old_logp, advantages):
+    def actor_loss(self, new_logp, old_logp, advantages):
         # Calculate ratio (pi_theta / pi_theta_old)
-        imp_weights = th.exp(logp - old_logp)
+        imp_weights = th.exp(new_logp - old_logp)
         # Calculate surrogate losses
         surr1 = imp_weights * advantages
         surr2 = th.clamp(imp_weights, 1.0 - self.eps_clip, 1.0 + self.eps_clip) * advantages
@@ -80,19 +70,19 @@ class MAPPO_Critic(nn.Module):
     def __init__(self, params):
         super(MAPPO_Critic, self).__init__()
         self.partial = params.partial_observability
+        self.eps_clip = params.eps_clip
         hidden = params.critic_hidden_dim
 
-        #hidden layer determination
         if not self.partial:
             input_dim = params.state_dim
+            self.fc_in = nn.Linear(input_dim, hidden[0])  # input layer
             self.fc2 = nn.Linear(hidden[0], hidden[1])
+            self.fc_out = nn.Linear(hidden[1], 1)
         else:
             input_dim = params.state_dim + params.action_dim * params.num_agents + params.num_agents
+            self.fc_in = nn.Linear(input_dim, hidden[0])  # input layer
             self.gru = nn.GRU(hidden[0], hidden[1], batch_first=True)
-
-        # common input and output layers
-        self.fc_in = nn.Linear(input_dim, hidden[0])  # input layer
-        self.fc_out = nn.Linear(hidden[1], 1)
+            self.fc_out = nn.Linear(hidden[1], 1)
 
         self.initialize_weights()
 
@@ -103,38 +93,25 @@ class MAPPO_Critic(nn.Module):
                 nn.init.constant_(m.bias, 0)
 
     def forward(self, *args):
-        """Fully observable: forward(state, agent_id)
-          - state:  [batch, state_dim]
-          - agent_id: [batch, num_agents]
-          returns logits [batch, action_dim]
-
-        Partially observable GRU: forward(x, hidden_state)
-          - x:            [batch, fpgs_dim + num_agents*action_dim + num_agents]
-          - hidden_state: [1, batch, hidden[1]]
-          returns (logits [batch, 1], new_hidden [1, batch, hidden[1]])
-        """
-        if self.partial:
-            x, h = args
-            x = th.tanh(self.fc_in(x))
-            x, h_new = self.gru(x, h)
-            value = self.fc_out(x)
-            return value, h_new
-        else:
+        if not self.partial:
             x, = args
             x = th.tanh(self.fc_in(x))
             x = th.tanh(self.fc2(x))
             value = self.fc_out(x)
             return value
+        else:
+            x, h = args
+            x = th.tanh(self.fc_in(x))
+            x, h_new = self.gru(x, h)
+            value = self.fc_out(x)
+            return value, h_new
 
 
-    def critic_loss(self, new_values, old_values, returns, eps_clip):
-        value_clip = old_values + th.clamp(new_values - old_values, -eps_clip, eps_clip)
+    def critic_loss(self, new_values, old_values, returns):
+        value_clip = old_values + th.clamp(new_values - old_values, -self.eps_clip, self.eps_clip)
         # value_clip = th.clamp(new_values, old_values - eps_clip, old_values + eps_clip)
-
-        # print(f"\n\nNew values: {new_values}\n\nOld values: {old_values}\n\nReturns: {returns}\n\n")
 
         loss_unclipped = (new_values - returns).pow(2)
         loss_clipped = (value_clip - returns).pow(2)
         loss = th.max(loss_unclipped, loss_clipped).mean()
-        # loss = (new_values - returns).pow(2).mean()
         return loss

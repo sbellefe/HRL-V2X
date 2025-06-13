@@ -6,6 +6,7 @@ class SharedParams:
     def __init__(self):
         super(SharedParams, self).__init__()
         self.device = th.device('cuda' if th.cuda.is_available() else 'cpu')
+        self.run_dir = None
 
         """global hyperparams""" #TODO add testing params
         self.num_trials = 5
@@ -20,13 +21,25 @@ class SharedParams:
         self.multi_location = True
         self.fast_fading = False
         self.include_AoI = False
-        self.single_loc_idx = 25.1 #only used for NFIG, SIG_SL
-        self.multi_loc_test_idx = range(20,30)  #only used for SIG_ML, POSIG
-        # self.multi_loc_test_idx = range(10,50,4)  #only used for SIG_ML, POSIG
-        # self.multi_loc_test_idx = range(35, 45)  #only used for SIG_ML, POSIG (could also be a list of specific data points)
-
-        # self.render_mode = True
         self.render_mode = False
+
+        # configured in main.py
+        self.partial_observability = None
+        self.state_dim, self.obs_dim, self.action_dim = None, None, None
+
+        #test data config
+        self.single_loc_idx = 25.1  # only used for NFIG, SIG_SL
+
+        # self.veh_data_dir = 'env/SUMOData/calibration.csv'
+        # self.multi_loc_test_idx = range(20,30)
+
+        self.veh_data_dir = 'env/SUMOData/journal_4_4.csv'
+        # self.multi_loc_test_idx = range(50,70,2)
+        self.multi_loc_test_idx = range(40,80,4)
+
+        # self.veh_data_dir = 'env/SUMOData/4ag_4V2I.csv'
+        # self.multi_loc_test_idx = range(10,50,4)
+        # self.multi_loc_test_idx = range(35, 45)
 
 
 class ParametersMAPPO(SharedParams):
@@ -34,23 +47,25 @@ class ParametersMAPPO(SharedParams):
         super(ParametersMAPPO, self).__init__()
 
         # training loop hyperparameters
-        self.buffer_episodes = 64#128 #32 # or "batch_size" num episodes in batch buffer
+        self.buffer_episodes = 256 #64 #32 # or "batch_size" num episodes in batch buffer
         self.opt_epochs = 10    #num optimization epochs per batch buffer
-        # self.mini_batch_size = 320
-        self.num_mini_batches = 2 #4
+        self.mini_batch_size = (self.buffer_episodes * self.t_max) // 1    #Used for SIG (only 1 minibatch)
+        self.num_mini_batches = 1 # Used for POSIG
         self.train_iterations = math.ceil(self.total_train_episodes / self.buffer_episodes) #top-lvl loop index
 
         # network hyperparameters
         self.actor_hidden_dim = (128, 128)
         self.critic_hidden_dim = (128, 128)
-        self.lr_actor = 5e-4 #3e-4
-        self.lr_critic = 5e-4#1e-3
+        self.lr_actor = 5e-4 #5e-4
+        self.lr_critic = 5e-4 #5e-4
 
         # training value hyperparameters
-        self.gamma = 0.95
-        self.gae_lambda = 0.99
-        self.entropy_coef = 0.005 #0.001
+        self.gamma = 0.99
+        self.gae_lambda = 0.95
+        self.entropy_coef = 0.001
         self.eps_clip = 0.2
+
+        # self.gradient_clip = 0.5  # gradient clip norm for updates TODO: IMPLEMENT??
 
 class ParametersDAC(SharedParams):
     def __init__(self):

@@ -38,6 +38,7 @@ class HighwayVisualizer:
         lane_count = 6
         self.lane_width_m = 3.2
         self.road_width_m = self.lane_width_m * lane_count
+        # self.eNB_xy = [500, -43]  # position of base station
         self.eNB_xy = [500, -43]  # position of base station
 
         # We'll draw the road to occupy 50% of the window's vertical dimension

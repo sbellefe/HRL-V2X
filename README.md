@@ -50,7 +50,7 @@ dac.py: Contains ```DAC_SingleOptionNet``` and ```DAC_Network``` classes. UPDATE
 runner.py: Contains ```ALGO_Runner``` class and the method ```run_experiment``` used for all algorithms.
 
 ## trainer: UPDATE
-ippo_trainer.py: Contains ```IPPOtrainer``` class with methods ```train```, ```test```.
+mappo_trainer.py: Contains ```MAPPOtrainer``` class with methods ```train_FO```, ```train_PO```, ```test_FO```, ```test_PO```.
 
 oc_trainer.py: Contains ```OCtrainer``` class with methods ```train```, ```test```.
 

@@ -2,17 +2,17 @@ import numpy as np
 import matplotlib.pyplot as plt
 import scipy.stats as st
 import seaborn as sns
-import sys
+import os, sys
 #TODO: Fix confidence interval / benchmarking calculation
 
 class Utils:
     def __init__(self):
         pass
 
-
     def benchmark_plot(self, all_train_returns,
                        all_test_returns,
                        test_interval,
+                       run_dir,
                        store_avg_test=True):
         """Data processing and calculations"""
         num_trials = len(all_train_returns)
@@ -56,7 +56,10 @@ class Utils:
         plt.ylabel('Test Return')
         plt.title('Test Returns with 95% Confidence Interval')
         plt.legend()
-        plt.show()
+        # plt.show()
+        fig = plt.gcf()
+        fig.savefig(os.path.join(run_dir, 'test_returns.png'))
+        plt.close(fig)
 
         """Plot density plot of test returns (Not in use)"""
         # plt.figure(figsize=(12, 6))
@@ -92,8 +95,7 @@ class Utils:
 
         if store_avg_test:
             returns_and_ci = [mean_test_returns, test_ci]
-            np.save('returns_and_ci.npy', returns_and_ci)
-
+            np.save(os.path.join(run_dir, 'returns_and_ci.npy'), returns_and_ci)
 
         return mean_test_returns, avg_max_return, avg_max_return_ci, individual_max_returns
 
