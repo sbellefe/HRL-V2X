@@ -12,7 +12,6 @@ class RolloutBuffer:
         self.t_max = params.t_max                   #timesteps per episode
         self.N = params.num_agents
         self.num_mb = params.num_mini_batches   #for RNN
-        self.mb_size = params.mini_batch_size   #for FFN
         self.gamma = params.gamma
         self.gae_lambda = params.gae_lambda
         self.state_dim = params.state_dim
@@ -100,17 +99,8 @@ class RolloutBuffer:
         ret = th.zeros_like(rewards)            # [T]
         gae = th.zeros_like(final_values)       # [1] or [N]
 
-        # print(f"values.shape: {values.shape}\n"
-        #       f"rewards.shape: {rewards.shape}\n"
-        #       f"final_values.shape: {final_values.shape}")
-
-
         values = th.cat([values, final_values], dim=0)  # [T+1] or [T+1, N]
 
-
-        # adv = th.zeros(T, device=self.device)
-        # ret = th.zeros(T, device=self.device)
-        # gae = th.zeros_like(final_values)
         R = 0.0
         for i in reversed(range(T)):
             delta = rewards[i] + self.gamma * values[i+1] - values[i]
@@ -147,7 +137,8 @@ class RolloutBuffer:
             returns = (returns - returns.mean()) / (returns.std() + 1e-8)
 
             dataset = th.utils.data.TensorDataset(states, actions, logps, values, returns, advantages)
-            dataloader = th.utils.data.DataLoader(dataset, batch_size=self.mb_size, shuffle=True)
+            mb_size = len(dataset) // self.num_mb
+            dataloader = th.utils.data.DataLoader(dataset, batch_size=mb_size, shuffle=True)
 
         else:
             # stack and reshape
@@ -171,9 +162,8 @@ class RolloutBuffer:
 
             # dataset of full episodes
             dataset = th.utils.data.TensorDataset(obs, fpgs, actions, logps, values, prev_action, returns, advantages)
-
-            mini_batch_size = len(dataset) // self.num_mb
-            dataloader = th.utils.data.DataLoader(dataset, batch_size=mini_batch_size, shuffle=True)
+            mb_size = len(dataset) // self.num_mb
+            dataloader = th.utils.data.DataLoader(dataset, batch_size=mb_size, shuffle=True)
 
         if self.plot and self.n_roll % 6 == 0:
             self.plot_rollout(dataset)

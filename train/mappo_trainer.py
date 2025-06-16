@@ -330,7 +330,7 @@ class MAPPOtrainer:
                     total_critic_loss = 0
                     for a in range(params.num_agents):
                         agent_id = agent_ids[a].repeat(MB,T, 1)
-                        x = th.cat([fpgs_mb[:,:,a,:], prev_joint_actions_mb, agent_id], dim=-1)
+                        x = th.cat([fpgs_mb[:,:,a,:], agent_id, prev_joint_actions_mb], dim=-1)
                         values_new, _ = central_critic(x, hidden_states_critic[a])
                         values_new = values_new.squeeze(-1)
 

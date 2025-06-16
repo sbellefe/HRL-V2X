@@ -49,7 +49,6 @@ class ParametersMAPPO(SharedParams):
         # training loop hyperparameters
         self.buffer_episodes = 256 #64 #32 # or "batch_size" num episodes in batch buffer
         self.opt_epochs = 10    #num optimization epochs per batch buffer
-        self.mini_batch_size = (self.buffer_episodes * self.t_max) // 1    #Used for SIG (only 1 minibatch)
         self.num_mini_batches = 1 # Used for POSIG
         self.train_iterations = math.ceil(self.total_train_episodes / self.buffer_episodes) #top-lvl loop index
 
