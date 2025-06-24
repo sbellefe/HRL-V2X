@@ -6,6 +6,7 @@ class SharedParams:
     def __init__(self):
         super(SharedParams, self).__init__()
         self.device = th.device('cuda' if th.cuda.is_available() else 'cpu')
+        # self.device = 'cpu'
         self.run_dir = None
 
         """global hyperparams""" #TODO add testing params
@@ -14,7 +15,7 @@ class SharedParams:
         self.t_max = 10        # max timesteps (communication intervals) per control interval
         self.k_max = 10                 #number of control intervals per episode (AoI only)
         self.num_agents = 4
-        self.test_interval = 1000
+        self.test_interval = 100
         self.test_episodes = 10
 
         """global environment parameters"""
@@ -26,6 +27,7 @@ class SharedParams:
         # configured in main.py
         self.partial_observability = None
         self.state_dim, self.obs_dim, self.action_dim = None, None, None
+        self.num_options = None
 
         #test data config
         self.single_loc_idx = 25.1  # only used for NFIG, SIG_SL
@@ -49,7 +51,7 @@ class ParametersMAPPO(SharedParams):
         # training loop hyperparameters
         self.buffer_episodes = 256 #64 #32 # or "batch_size" num episodes in batch buffer
         self.opt_epochs = 10    #num optimization epochs per batch buffer
-        self.num_mini_batches = 1 # Used for POSIG
+        self.num_mini_batches = 1
         self.train_iterations = math.ceil(self.total_train_episodes / self.buffer_episodes) #top-lvl loop index
 
         # network hyperparameters
@@ -70,12 +72,19 @@ class ParametersDAC(SharedParams):
     def __init__(self):
         super(ParametersDAC, self).__init__()
 
+        # training loop hyperparameters
+        self.buffer_episodes = 256  # num episodes in batch buffer
+        self.opt_epochs = 5  # num optimization epochs per batch buffer per mdp
+        self.num_mini_batches = 1
+        self.train_iterations = math.ceil(self.total_train_episodes / self.buffer_episodes)  # top-lvl loop index
+
         #Network hidden dimensions
-        dim = 64
-        self.feature_dim = 64
-        self.option_hidden_units = (dim, dim) #hidden neurons for sub-policy and beta networks
-        self.actor_hidden_units = (dim, dim) #hidden neurons for master policy network
-        self.critic_hidden_units = (dim, dim) #hidden neurons for critic network
+        dim1 = 64
+        dim2 = 64
+        # self.feature_dim = 64
+        self.option_hidden_units = (dim1, dim2) #hidden neurons for sub-policy and beta networks
+        self.actor_hidden_units = (dim1, dim2) #hidden neurons for master policy network
+        self.critic_hidden_units = (dim1, dim2) #hidden neurons for critic network
 
         #hidden neuron activation functions lambda x: F.relu(x) or F.tanh(x)
         self.pi_l_activation = lambda x: F.tanh(x)     #option policies
@@ -83,24 +92,17 @@ class ParametersDAC(SharedParams):
         self.pi_h_activation = lambda x: F.tanh(x)     #master policy
         self.critic_activation = lambda x: F.tanh(x)     #critic
 
-        # training loop hyperparameters
-        self.num_options = 4
-        self.buffer_episodes = 5  # num episodes in batch buffer
-        self.opt_epochs = 5  # num optimization epochs per batch buffer per mdp
-        self.mini_batch_size = 64
-        self.train_iterations = math.ceil(self.total_train_episodes / self.buffer_episodes)  # top-lvl loop index
-
         # training value hyperparameters
-        self.lr_ha = 3e-4       #high actor (pi_W) learning rate
-        self.lr_la = 3e-4       #low actor (pi_w) learning rate
-        self.lr_critic = 1e-3       #critic learning rate
-        self.lr_beta = 1e-4     #beta network learning rate
-        self.lr_phi = 5e-4      #shared feature network learning rate
+        self.lr_ha = 5e-4#3e-4       #high actor (pi_W) learning rate
+        self.lr_la = 5e-4#3e-4       #low actor (pi_w) learning rate
+        self.lr_critic = 5e-4#1e-3       #critic learning rate
+        self.lr_beta = 1e-4#1e-4     #beta network learning rate
+        # self.lr_phi = 5e-4      #shared feature network learning rate
         self.eps_clip = 0.2     #ppo clipping parameter
         self.gamma = 0.99       #discount
-        self.gae_lambda = 0.99      #GAE smoothing param
-        self.entropy_coef_h = 0.01  #high MDP exploration entropy coefficient
-        self.entropy_coef_l = 0.01  #low MDP exploration entropy coefficient
+        self.gae_lambda = 0.95      #GAE smoothing param
+        self.entropy_coef_h = 0.001 #0.01  #high MDP exploration entropy coefficient
+        self.entropy_coef_l = 0.001 #0.01  #low MDP exploration entropy coefficient
 
 
 class ParametersOC(SharedParams):

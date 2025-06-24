@@ -99,6 +99,26 @@ class V2XEnvironment:
             self.action2RRA[action] = (sc, self.V2V_power_dB_list[pw])
         self.action2RRA[self.action_dim-1] = (-1, -1) #do-nothing (null action)
 
+        # HRL USAGE inverted mapping: (sc, dB_idx) → flat_int
+        # now every (sc, 3) → 12, every (sc, 0–2) → 0–11
+        self.RRA_idx2int = {
+            (sc, pw): (sc * self.num_power_levels + pw
+                       if pw < self.num_power_levels
+                       else self.action_dim - 1)
+            for sc in range(self.num_SC)
+            for pw in range(self.num_power_levels + 1)
+        }
+
+
+        # self.RRA_idx2int = {}
+        # # 0..11: real (subchannel, power) combos
+        # for sc in range(self.num_SC):            # 0,1,2,3
+        #     for pw in range(self.num_power_levels):       # 0,1,2
+        #         flat = sc * self.num_power_levels + pw
+        #         self.RRA_idx2int[(sc, pw)] = flat
+        # for pw in range(self.num_power_levels): #"No Transmit"
+        #     self.RRA_idx2int[(self.num_SC, pw)] = self.action_dim - 1
+
         # 3) Agent2Vehicle mapping dictionary, assumes the 1st vehicle in platoon is transmitting agent
             #keys: agent index (i.e. 0, 1, 2, 3,...)
             #values: V2V vehicle index (i.e. 0, 2, 4, 6,...) """

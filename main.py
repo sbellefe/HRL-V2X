@@ -2,14 +2,15 @@ import argparse, time, os, sys
 from datetime import datetime
 import pandas as pd
 
-from env.v2x_env import V2XEnvironment
-
 # Import runner, trainers, and parameters classes here
+from util.parameters import ParametersMAPPO, ParametersDAC, ParametersOC
 from runner.runner import ALGO_Runner
 from train.mappo_trainer import MAPPOtrainer
+from train.dac_trainer import DACtrainer
 # from train.oc_trainer import OCtrainer
-# from train.dac_trainer import DACtrainer
-from util.parameters import ParametersMAPPO, ParametersOC, ParametersDAC
+
+from env.v2x_env import V2XEnvironment
+
 
 def main():
     parser  = argparse.ArgumentParser(description = "Run different variations of algorithms and environments.")
@@ -18,21 +19,20 @@ def main():
     args = parser.parse_args()
 
     """Load algorithm params and trainers"""
+
+    """Create environment"""
     if args.algo == 'mappo':
         params = ParametersMAPPO()
         trainer = lambda: MAPPOtrainer()
+    elif args.algo == 'dac':
+        params = ParametersDAC()
+        trainer = lambda: DACtrainer()
     elif args.algo == 'oc':
         raise ValueError('not implemented')
         params = ParametersOC()
         trainer = lambda: OCtrainer()
-    elif args.algo == 'dac':
-        raise ValueError('not implemented')
-        params = ParametersDAC()
-        trainer = lambda: DACtrainer()
     else:
         raise ValueError("Algorithm name incorrect or not found")
-
-    """Create environment"""
     #load position data from .csv
     veh_pos_data = pd.read_csv(params.veh_data_dir)
     # print("Raw pd.read_csv:",veh_pos_data)
@@ -77,11 +77,16 @@ def main():
     #Load environment
     env = V2XEnvironment(env_setup, veh_pos_data)
 
-    #add additional parameters
+    """add additional parameters"""
     params.state_dim = env.state_dim
     params.obs_dim = env.obs_dim
     params.action_dim = env.action_dim
     params.partial_observability = partial_observability
+
+    #OVERRDE for HRL setups
+    if args.algo in ['dac', 'oc']:
+        params.action_dim = env.num_power_levels + 1 #including 0dB action
+        params.num_options = env.num_SC
 
     """Build run directory // store params"""
     runs_root = os.path.join(os.getcwd(), "runs")
@@ -94,7 +99,7 @@ def main():
     ff_str = "FF" if params.fast_fading else "NFF"
     run_dir = os.path.join(runs_root, f"{ts}_{algo_str}_{env_str}_{ff_str}")
 
-    os.makedirs(run_dir, exist_ok=True)
+    os.makedirs(run_dir, exist_ok=False)    #Change to exist_ok=False for running full experiments
     params.run_dir = run_dir
 
     info_path = os.path.join(run_dir, "info.txt")
