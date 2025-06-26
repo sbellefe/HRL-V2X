@@ -90,13 +90,12 @@ class MAPPOtrainer:
 
                         if done:
                             #get final value
-                            with th.no_grad():
-                                final_values = central_critic(global_state).view(-1)
-                            # t0 = env.current_veh_positions['time'].unique()[0]
-                            # print(f"------Episode {n_ep} Complete! t0 = {t0}. R_tot = {total_reward:.2f}")
+                            # with th.no_grad():
+                            #     final_values = central_critic(global_state).view(-1)
                             break
 
-                buffer.process_episode(final_values) #tensor shape [1]
+                # buffer.process_episode(final_values) #tensor shape [1]
+                buffer.process_episode()
                 n_ep += 1
                 train_returns.append(total_reward)
 
@@ -265,20 +264,19 @@ class MAPPOtrainer:
 
                         if done:
                             #get final value
-                            prev_joint_action = prev_actions.view(1, -1)  # shape [1, N * action_dim]
-                            final_values = []
-                            for a in range(params.num_agents):
-                                x = th.cat([fp_global_states[a], agent_ids[a], prev_joint_action], dim=-1).unsqueeze(0)  # shape [1, 1, input_dim]
-                                with th.no_grad():
-                                    final_value, _ = central_critic(x, hidden_states_critic[a])
-                                final_values.append(final_value.view(-1))  # [1]
-                            final_values = th.cat(final_values, dim=0)  # shape [N]
-
-                            # print(f"------Episode {n_ep} Complete! R_tot = {total_reward:.2f}")
+                            # prev_joint_action = prev_actions.view(1, -1)  # shape [1, N * action_dim]
+                            # final_values = []
+                            # for a in range(params.num_agents):
+                            #     x = th.cat([fp_global_states[a], agent_ids[a], prev_joint_action], dim=-1).unsqueeze(0)  # shape [1, 1, input_dim]
+                            #     with th.no_grad():
+                            #         final_value, _ = central_critic(x, hidden_states_critic[a])
+                            #     final_values.append(final_value.view(-1))  # [1]
+                            # final_values = th.cat(final_values, dim=0)  # shape [N]
                             break
 
 
-                buffer.process_episode(final_values)
+                # buffer.process_episode(final_values)
+                buffer.process_episode()
                 n_ep += 1
                 train_returns.append(total_reward)
 

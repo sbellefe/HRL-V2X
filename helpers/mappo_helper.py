@@ -91,9 +91,9 @@ class RolloutBuffer:
         else:
             values = th.stack(self.values[-T:], dim=0) # [T, N]
             if final_values is None:
-                final_values = th.zeros_like(values[-1:])  # [N]
+                final_values = th.zeros_like(values[-1:])  # [1, N]
             else:
-                final_values = final_values.unsqueeze(0)
+                final_values = final_values.unsqueeze(0) # [1, N]
 
         adv = th.zeros_like(values)             # [T] or [T, N]
         ret = th.zeros_like(rewards)            # [T]

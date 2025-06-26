@@ -15,7 +15,7 @@ class SharedParams:
         self.t_max = 10        # max timesteps (communication intervals) per control interval
         self.k_max = 10                 #number of control intervals per episode (AoI only)
         self.num_agents = 4
-        self.test_interval = 100
+        self.test_interval = 1000
         self.test_episodes = 10
 
         """global environment parameters"""

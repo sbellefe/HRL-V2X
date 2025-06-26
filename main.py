@@ -86,7 +86,7 @@ def main():
     #OVERRDE for HRL setups
     if args.algo in ['dac', 'oc']:
         params.action_dim = env.num_power_levels + 1 #including 0dB action
-        params.num_options = env.num_SC
+        params.num_options = env.num_SC + 1
 
     """Build run directory // store params"""
     runs_root = os.path.join(os.getcwd(), "runs")
