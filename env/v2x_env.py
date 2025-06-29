@@ -359,7 +359,7 @@ class V2XEnvironment:
         done = (t == self.t_max - 1) and (k == self.k_max)
 
         #---- Get next state ----
-        global_next_state, local_next_states, fp_global_next_states = self.get_state(t_step=t)
+        global_next_state, local_next_states, fp_global_next_states = self.get_state(t_step=t+1)
 
         if self.debug:
             PLji = np.round(self.gs['gji'], decimals=2)

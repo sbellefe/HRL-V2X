@@ -90,8 +90,7 @@ class RolloutBuffer_FO:
         self.num_options = params.num_options
 
 
-        B, T, N = self.batch_size, self.t_max, self.N
-        BT = B * T
+        BT, N = self.batch_size * self.t_max, self.N
         # Flat lists of transitions for the entire batch (length = batch_size * t_max)
         self.global_state = th.zeros((BT, self.state_dim), device=self.device)
         self.action = th.zeros((BT, N), dtype=th.long, device=self.device)
@@ -103,10 +102,6 @@ class RolloutBuffer_FO:
         self.value_l = th.zeros((BT, N), device=self.device)
         self.logp_h = th.zeros((BT, N), device=self.device)
         self.logp_l = th.zeros((BT, N), device=self.device)
-
-        #episode-wise lists for computing returns / advantages TODO: THESE COULD BE FLAT TOO
-
-
 
         # placeholders for computed advantages and returns
         self.adv_h = None  # will be [BT, N]

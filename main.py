@@ -99,7 +99,7 @@ def main():
     ff_str = "FF" if params.fast_fading else "NFF"
     run_dir = os.path.join(runs_root, f"{ts}_{algo_str}_{env_str}_{ff_str}")
 
-    os.makedirs(run_dir, exist_ok=False)    #Change to exist_ok=False for running full experiments
+    os.makedirs(run_dir, exist_ok=True)    #Change to exist_ok=False for running full experiments
     params.run_dir = run_dir
 
     info_path = os.path.join(run_dir, "info.txt")

@@ -20,7 +20,8 @@ class MAPPO_Actor(nn.Module):
             self.fc2 = nn.Linear(hidden[0], hidden[1])
             self.fc_out = nn.Linear(hidden[1], self.output_dim)
         else:
-            input_dim = params.obs_dim + params.action_dim + params.num_agents
+            # input_dim = params.obs_dim + params.action_dim + params.num_agents
+            input_dim = params.obs_dim + params.num_agents
             self.fc_in = nn.Linear(input_dim, hidden[0])  # input layer
             self.gru = nn.GRU(hidden[0], hidden[1], batch_first=True)
             self.fc_out = nn.Linear(hidden[1], self.output_dim)
@@ -79,7 +80,8 @@ class MAPPO_Critic(nn.Module):
             self.fc2 = nn.Linear(hidden[0], hidden[1])
             self.fc_out = nn.Linear(hidden[1], 1)
         else:
-            input_dim = params.state_dim + params.action_dim * params.num_agents + params.num_agents
+            # input_dim = params.state_dim + params.action_dim * params.num_agents + params.num_agents
+            input_dim = params.state_dim + params.num_agents
             self.fc_in = nn.Linear(input_dim, hidden[0])  # input layer
             self.gru = nn.GRU(hidden[0], hidden[1], batch_first=True)
             self.fc_out = nn.Linear(hidden[1], 1)
