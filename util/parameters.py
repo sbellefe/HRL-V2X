@@ -19,8 +19,8 @@ class SharedParams:
         self.test_episodes = 10
 
         """global environment parameters"""
-        self.multi_location = True
-        self.fast_fading = False
+        self.multi_location = False
+        self.fast_fading = True
         self.include_AoI = False
         self.render_mode = False
 
@@ -30,7 +30,7 @@ class SharedParams:
         self.num_options = None
 
         #test data config
-        self.single_loc_idx = 25.1  # only used for NFIG, SIG_SL
+        self.single_loc_idx = 76  # only used for NFIG, SIG_SL
 
         # self.veh_data_dir = 'env/SUMOData/calibration.csv'
         # self.multi_loc_test_idx = range(20,30)

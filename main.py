@@ -96,10 +96,11 @@ def main():
     ts = datetime.now().strftime("%Y-%m-%d_%H.%M")  # e.g. "2025-06-09_14.34"
     algo_str = args.algo.upper()
     env_str = args.env
+    loc = "MLOC" if params.multi_location else f"SLOC-{params.single_loc_idx}"
     ff_str = "FF" if params.fast_fading else "NFF"
-    run_dir = os.path.join(runs_root, f"{ts}_{algo_str}_{env_str}_{ff_str}")
+    run_dir = os.path.join(runs_root, f"{ts}_{algo_str}_{env_str}_{loc}_{ff_str}")
 
-    os.makedirs(run_dir, exist_ok=True)    #Change to exist_ok=False for running full experiments
+    os.makedirs(run_dir, exist_ok=False)    #Change to exist_ok=False for running full experiments
     params.run_dir = run_dir
 
     info_path = os.path.join(run_dir, "info.txt")
