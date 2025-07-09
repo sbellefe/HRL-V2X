@@ -3,7 +3,148 @@ import numpy as np
 import torch as th
 from torch import nn
 from torch.nn import functional as F
+from torch.distributions import Categorical
 
+
+class DAC_HighActor(nn.Module):
+    def __init__(self, params):
+        super(DAC_HighActor, self).__init__()
+        self.gate_a = params.pi_h_activation
+        self.gate_b = params.beta_activation
+        self.eps_clip = params.eps_clip
+        input_dim = params.state_dim + params.num_agents
+        hidden_a = params.actor_hidden_units
+        hidden_b = params.beta_hidden_units
+        output_dim = params.num_options
+
+        # define high actor network
+        self.actor_fc1 = nn.Linear(input_dim, hidden_a[0])
+        self.actor_fc2 = nn.Linear(hidden_a[0], hidden_a[1])
+        self.actor_fc3 = nn.Linear(hidden_a[1], output_dim)
+
+        # define option termination network
+        self.beta_fc1 = nn.Linear(input_dim, hidden_b[0])
+        self.beta_fc2 = nn.Linear(hidden_b[0], hidden_b[1])
+        self.beta_fc3 = nn.Linear(hidden_b[1], output_dim)
+
+        self.initialize_weights()
+
+    def initialize_weights(self):
+        for m in self.modules():
+            if isinstance(m, nn.Linear):
+                nn.init.orthogonal_(m.weight)
+                nn.init.constant_(m.bias, 0)
+
+    def forward(self, x):
+        """state: raw state as tensor.shape[batch_size, state_dim]"""
+
+        #pass through master policy network
+        x_pi = self.gate_a(self.actor_fc1(x))
+        x_pi = self.gate_a(self.actor_fc2(x_pi))
+        logits_pi = self.actor_fc3(x_pi)
+        # pi_W = F.softmax(logits_pi, dim=-1)
+
+        #pass through beta net
+        x_beta = self.gate_b(self.beta_fc1(x))
+        x_beta = self.gate_b(self.beta_fc2(x_beta))
+        logits_beta = self.beta_fc3(x_beta)
+        betas = F.sigmoid(logits_beta)
+
+        return logits_pi, betas
+
+    @staticmethod
+    def select_action(logits):
+        action_dist = Categorical(logits=logits)
+        action = action_dist.sample()
+        logp = action_dist.log_prob(action)
+        return action, logp #, action_dist
+
+
+    def actor_loss(self, new_logp, old_logp, advantages):
+        # Calculate ratio (pi_theta / pi_theta_old)
+        imp_weights = th.exp(new_logp - old_logp)
+        # Calculate surrogate losses
+        surr1 = imp_weights * advantages
+        surr2 = th.clamp(imp_weights, 1.0 - self.eps_clip, 1.0 + self.eps_clip) * advantages
+        # Calculate the minimum surrogate loss for clipping
+        loss = -th.min(surr1, surr2).mean()
+        return loss
+
+
+class DAC_LowActor(nn.Module):
+    def __init__(self, params):
+        super(DAC_LowActor, self).__init__()
+        self.gate = params.pi_l_activation
+        input_dim = params.state_dim + params.num_agents + params.num_options
+        hidden = params.option_hidden_units
+        output_dim = params.action_dim
+
+        # define high actor network
+        self.actor_fc1 = nn.Linear(input_dim, hidden[0])
+        self.actor_fc2 = nn.Linear(hidden[0], hidden[1])
+        self.actor_fc3 = nn.Linear(hidden[1], output_dim)
+
+        self.initialize_weights()
+
+    def initialize_weights(self):
+        for m in self.modules():
+            if isinstance(m, nn.Linear):
+                nn.init.orthogonal_(m.weight)
+                nn.init.constant_(m.bias, 0)
+
+    def forward(self, x):
+        #pass through master policy network
+        x = self.gate(self.actor_fc1(x))
+        x = self.gate(self.actor_fc2(x))
+        logits = self.actor_fc3(x)
+        # pi_W = F.softmax(logits_pi, dim=-1)
+        return logits
+
+
+class DAC_Critic(nn.Module):
+    def __init__(self, params):
+        super(DAC_Critic, self).__init__()
+        self.gate = params.critic_activation
+        self.eps_clip = params.eps_clip
+        input_dim = params.state_dim
+        hidden = params.critic_hidden_units
+        output_dim = params.num_options
+
+        # define critic network
+        self.fc1 = nn.Linear(input_dim, hidden[0])
+        self.fc2 = nn.Linear(hidden[0], hidden[1])
+        self.fc3 = nn.Linear(hidden[1], output_dim)
+
+        self.initialize_weights()
+
+    def initialize_weights(self):
+        for m in self.modules():
+            if isinstance(m, nn.Linear):
+                nn.init.orthogonal_(m.weight)
+                nn.init.constant_(m.bias, 0)
+
+    def forward(self, x):
+        x = self.gate(self.fc1(x))
+        x = self.gate(self.fc2(x))
+        value = self.fc3(x)
+        return value
+
+    def critic_loss(self, new_values, old_values, returns):
+        #clip the difference between old and new values
+        value_clip = old_values + th.clamp(new_values - old_values, -self.eps_clip, self.eps_clip)
+        # value_clip = th.clamp(new_values, old_values - eps_clip, old_values + eps_clip)
+        loss_unclipped = (new_values - returns).pow(2)
+        loss_clipped = (value_clip - returns).pow(2)
+        loss = th.max(loss_unclipped, loss_clipped).mean()
+        return loss
+
+
+
+
+
+
+
+#ZZZZZZZZZZZZZZZZZZZ
 class DAC_SingleOptionNet(nn.Module):
     """option policy and termination network for a single option"""
     def __init__(self, params):
@@ -29,6 +170,7 @@ class DAC_SingleOptionNet(nn.Module):
         return pi_w #Shape: [batch_size, action_dim]
 
 
+#OLD
 class DAC_Actors(nn.Module):
     """'Actors' = high-policy, low-policy, beta """
     def __init__(self, params):
@@ -103,44 +245,6 @@ class DAC_Actors(nn.Module):
         surr2 = th.clamp(imp_weights, 1.0 - self.eps_clip, 1.0 + self.eps_clip) * advantages
         # Calculate the minimum surrogate loss for clipping
         loss = -th.min(surr1, surr2).mean()
-        return loss
-
-
-class DAC_Critic(nn.Module):
-    def __init__(self, params):
-        super(DAC_Critic, self).__init__()
-        self.gate = params.critic_activation
-        self.eps_clip = params.eps_clip
-        input_dim = params.state_dim
-        hidden = params.critic_hidden_units
-        output_dim = params.num_options
-
-        # define critic network
-        self.fc1 = nn.Linear(input_dim, hidden[0])
-        self.fc2 = nn.Linear(hidden[0], hidden[1])
-        self.fc3 = nn.Linear(hidden[1], output_dim)
-
-        self.initialize_weights()
-
-    def initialize_weights(self):
-        for m in self.modules():
-            if isinstance(m, nn.Linear):
-                nn.init.orthogonal_(m.weight)
-                nn.init.constant_(m.bias, 0)
-
-    def forward(self, x):
-        x = th.tanh(self.fc1(x))
-        x = th.tanh(self.fc2(x))
-        value = self.fc3(x)
-        return value
-
-    def critic_loss(self, new_values, old_values, returns):
-        #clip the difference between old and new values
-        value_clip = old_values + th.clamp(new_values - old_values, -self.eps_clip, self.eps_clip)
-        # value_clip = th.clamp(new_values, old_values - eps_clip, old_values + eps_clip)
-        loss_unclipped = (new_values - returns).pow(2)
-        loss_clipped = (value_clip - returns).pow(2)
-        loss = th.max(loss_unclipped, loss_clipped).mean()
         return loss
 
 

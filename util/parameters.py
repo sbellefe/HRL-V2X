@@ -19,7 +19,7 @@ class SharedParams:
         self.test_episodes = 10
 
         """global environment parameters"""
-        self.multi_location = False
+        self.multi_location = True
         self.fast_fading = True
         self.include_AoI = False
         self.render_mode = False
@@ -74,7 +74,7 @@ class ParametersDAC(SharedParams):
 
         # training loop hyperparameters
         self.buffer_episodes = 256  # num episodes in batch buffer
-        self.opt_epochs = 5  # num optimization epochs per batch buffer per mdp
+        self.opt_epochs = 10#5  # num optimization epochs per batch buffer per mdp
         self.num_mini_batches = 1
         self.train_iterations = math.ceil(self.total_train_episodes / self.buffer_episodes)  # top-lvl loop index
 
@@ -82,8 +82,9 @@ class ParametersDAC(SharedParams):
         dim1 = 64
         dim2 = 64
         # self.feature_dim = 64
-        self.option_hidden_units = (dim1, dim2) #hidden neurons for sub-policy and beta networks
+        self.option_hidden_units = (dim1, dim2) #hidden neurons for sub-policy network
         self.actor_hidden_units = (dim1, dim2) #hidden neurons for master policy network
+        self.beta_hidden_units = (dim1, dim2) #hidden neurons for beta network
         self.critic_hidden_units = (dim1, dim2) #hidden neurons for critic network
 
         #hidden neuron activation functions lambda x: F.relu(x) or F.tanh(x)

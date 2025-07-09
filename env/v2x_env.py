@@ -100,14 +100,28 @@ class V2XEnvironment:
         self.action2RRA[self.action_dim-1] = (-1, -1) #do-nothing (null action)
 
         # HRL USAGE inverted mapping: (sc, dB_idx) → flat_int
-        # now every (sc, 3) → 12, every (sc, 0–2) → 0–11
         self.RRA_idx2int = {
-            (sc, pw): (sc * self.num_power_levels + pw
-                       if pw < self.num_power_levels
-                       else self.action_dim - 1)
-            for sc in range(self.num_SC)
-            for pw in range(self.num_power_levels + 1)
+            (opt, a): (
+                # if opt selects a real sub-channel AND a is a real power index
+                (opt * self.num_power_levels + a)
+                if (opt < self.num_SC and a < self.num_power_levels)
+                # else (either "no-transmit" option or "do-nothing" action) → null action
+                else self.action_dim - 1
+            )
+            for opt in range(self.num_SC + 1)  # 0…num_SC  (last one = NO-TRANSMIT)
+            for a in range(self.num_power_levels + 1)  # 0…num_power_levels  (last one = DO-NOTHING)
         }
+
+
+
+        # # now every (sc, 3) → 12, every (sc, 0–2) → 0–11
+        # self.RRA_idx2int = {
+        #     (sc, pw): (sc * self.num_power_levels + pw
+        #                if pw < self.num_power_levels
+        #                else self.action_dim - 1)
+        #     for sc in range(self.num_SC)
+        #     for pw in range(self.num_power_levels + 1)
+        # }
 
 
         # self.RRA_idx2int = {}

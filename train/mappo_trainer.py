@@ -93,6 +93,7 @@ class MAPPOtrainer_FO:
                         global_state = th.tensor(global_next_state, dtype=th.float32, device=device)
 
                         if done:
+                            # print(f"****episode {n_ep} complete. Reward = {total_reward}****")
                             break
 
                 n_ep += 1
@@ -302,6 +303,7 @@ class MAPPOtrainer_PO:
                                                      for a in range(N)], dim=0)  # ➞ [N, 1, state_dim]
 
                         if done:
+                            # print(f"****episode {n_ep} complete. Reward = {total_reward}****")
                             break
 
                 n_ep += 1
